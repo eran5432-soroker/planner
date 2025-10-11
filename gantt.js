@@ -5,9 +5,12 @@
 let ganttState = {
   startDate: null,
   endDate: null,
-  timeScale: 'hours', // 'hours' or 'days'
-  zoomLevel: 1,
-  scrollPosition: 0
+  showEmptyDays: false, // New: show/hide empty days
+  scrollPosition: 0,
+  // Cache for performance
+  daysWithJobsCache: null,
+  conflictsCache: null,
+  depIssuesCache: null
 };
 
 // Gantt configuration
@@ -17,17 +20,13 @@ const GANTT_CONFIG = {
   taskHeight: 50, // height of each task row
   taskBarHeight: 40, // height of the task bar itself
   headerHeight: 60, // height of time header
-  leftPanelWidth: 300, // width of task names panel
-  minZoom: 0.5,
-  maxZoom: 3,
-  defaultZoom: 1
+  leftPanelWidth: 300 // width of task names panel
 };
 
 // Load saved Gantt dates from localStorage
 function loadGanttDates() {
   const savedStartDate = localStorage.getItem('ganttStartDate');
   const savedEndDate = localStorage.getItem('ganttEndDate');
-  const savedZoomLevel = localStorage.getItem('ganttZoomLevel');
   
   let loaded = false;
   
@@ -54,15 +53,6 @@ function loadGanttDates() {
     }
   }
   
-  // Load zoom level
-  if (savedZoomLevel) {
-    const zoomLevel = parseFloat(savedZoomLevel);
-    if (!isNaN(zoomLevel) && zoomLevel >= GANTT_CONFIG.minZoom && zoomLevel <= GANTT_CONFIG.maxZoom) {
-      ganttState.zoomLevel = zoomLevel;
-      document.getElementById('gantt-zoom-level').textContent = Math.round(zoomLevel * 100) + '%';
-    }
-  }
-  
   return loaded;
 }
 
@@ -83,13 +73,9 @@ function setupGanttEventListeners() {
   // Date range controls
   document.getElementById('gantt-apply-dates')?.addEventListener('click', updateGanttDateRange);
   
-  // Zoom controls
-  document.getElementById('gantt-zoom-in')?.addEventListener('click', () => zoomGantt(1.2));
-  document.getElementById('gantt-zoom-out')?.addEventListener('click', () => zoomGantt(0.8));
-  
-  // Scale controls
-  document.getElementById('gantt-show-hours')?.addEventListener('change', (e) => {
-    ganttState.timeScale = e.target.checked ? 'hours' : 'days';
+  // Show empty days toggle
+  document.getElementById('gantt-show-empty-days')?.addEventListener('change', (e) => {
+    ganttState.showEmptyDays = e.target.checked;
     renderGantt();
   });
 }
@@ -161,27 +147,17 @@ function updateGanttDateRange() {
   renderGantt();
 }
 
-// Zoom Gantt
-function zoomGantt(factor) {
-  ganttState.zoomLevel = Math.max(
-    GANTT_CONFIG.minZoom,
-    Math.min(GANTT_CONFIG.maxZoom, ganttState.zoomLevel * factor)
-  );
-  
-  // Save zoom level to localStorage
-  localStorage.setItem('ganttZoomLevel', ganttState.zoomLevel.toString());
-  
-  document.getElementById('gantt-zoom-level').textContent = 
-    Math.round(ganttState.zoomLevel * 100) + '%';
-  
-  renderGantt();
-}
 
 // Render Gantt chart
 function renderGantt() {
   if (!ganttState.startDate || !ganttState.endDate) {
     updateGanttDateRange();
   }
+  
+  // Clear caches before render
+  ganttState.daysWithJobsCache = null;
+  ganttState.conflictsCache = null;
+  ganttState.depIssuesCache = null;
   
   renderGanttHeader();
   renderGanttTasks();
@@ -192,84 +168,103 @@ function renderGantt() {
   }, 100);
 }
 
+// Get unique days that have jobs (with caching for performance)
+function getDaysWithJobs() {
+  // Return cached value if available
+  if (ganttState.daysWithJobsCache) {
+    return ganttState.daysWithJobsCache;
+  }
+  
+  // If showing empty days, return all days in range
+  if (ganttState.showEmptyDays && ganttState.startDate && ganttState.endDate) {
+    const days = [];
+    let current = ganttState.startDate.clone().startOf('day');
+    const end = ganttState.endDate.clone().startOf('day');
+    
+    while (current.isSameOrBefore(end, 'day')) {
+      days.push(current.clone());
+      current = current.add(1, 'day');
+    }
+    
+    ganttState.daysWithJobsCache = days;
+    return days;
+  }
+  
+  // Otherwise, only return days with jobs
+  const allJobs = getGanttJobs();
+  const daysSet = new Set();
+  
+  allJobs.forEach(job => {
+    if (job.start && job.end) {
+      const start = dayjs(job.start);
+      const end = dayjs(job.end);
+      
+      if (start.isValid() && end.isValid()) {
+        // Add all days between start and end
+        let current = start.clone().startOf('day');
+        const endDay = end.clone().startOf('day');
+        
+        while (current.isSameOrBefore(endDay, 'day')) {
+          daysSet.add(current.format('YYYY-MM-DD'));
+          current = current.add(1, 'day');
+        }
+      }
+    }
+  });
+  
+  // Convert to sorted array of dayjs objects
+  const result = Array.from(daysSet)
+    .map(dateStr => dayjs(dateStr))
+    .sort((a, b) => a.valueOf() - b.valueOf());
+  
+  ganttState.daysWithJobsCache = result;
+  return result;
+}
+
 // Render Gantt header with time scale
 function renderGanttHeader() {
   const header = document.getElementById('gantt-time-header');
   if (!header) return;
   
-  const startDate = ganttState.startDate;
-  const endDate = ganttState.endDate;
   const timeScale = ganttState.timeScale;
+  
+  // Get only days that have jobs
+  const daysWithJobs = getDaysWithJobs();
+  
+  if (daysWithJobs.length === 0) {
+    header.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--pico-muted-color);">אין משימות לתצוגה</div>';
+    return;
+  }
   
   let headerHTML = '';
   
-  if (timeScale === 'hours') {
-    // Two-line header: days on top, hours below
-    const days = [];
-    const hours = [];
+  // Two-line header: days on top, hours below
+  const days = [];
+  let cumulativePosition = 0;
+  
+  daysWithJobs.forEach((dayDate, index) => {
+    const dayName = dayDate.format('ddd DD/MM');
+    const dayWidth = 24 * GANTT_CONFIG.hourWidth;
     
-    // Calculate the actual time range based on tasks
-    const allJobs = getGanttJobs();
-    let actualStart = startDate;
-    let actualEnd = endDate;
+    // Add day header
+    days.push(`<div class="gantt-day-header" style="width: ${dayWidth}px; left: ${cumulativePosition}px; position: absolute;">${dayName}</div>`);
     
-    if (allJobs.length > 0) {
-      const jobTimes = allJobs
-        .filter(job => job.start && job.end)
-        .map(job => ({ start: dayjs(job.start), end: dayjs(job.end) }))
-        .filter(job => job.start.isValid() && job.end.isValid());
-      
-      if (jobTimes.length > 0) {
-        actualStart = dayjs.min(jobTimes.map(j => j.start));
-        actualEnd = dayjs.max(jobTimes.map(j => j.end));
-      }
+    // Add hours for this day
+    const dayHours = [];
+    for (let h = 0; h < 24; h++) {
+      const hourWidth = GANTT_CONFIG.hourWidth;
+      const hourPosition = cumulativePosition + (h * GANTT_CONFIG.hourWidth);
+      dayHours.push(`<div class="gantt-hour-header" style="width: ${hourWidth}px; left: ${hourPosition}px; position: absolute; z-index: 10;">${h}</div>`);
     }
+    headerHTML += dayHours.join('');
     
-    // Create day headers based on actual time range
-    let current = actualStart.clone().startOf('day');
-    const endDay = actualEnd.clone().endOf('day');
-    
-    while (current.isBefore(endDay) || current.isSame(endDay, 'day')) {
-      const dayName = current.format('ddd DD/MM');
-      const dayWidth = 24 * GANTT_CONFIG.hourWidth * ganttState.zoomLevel;
-      const dayStartHour = current.diff(startDate, 'hours', true);
-      const dayPosition = dayStartHour * GANTT_CONFIG.hourWidth * ganttState.zoomLevel;
-      
-      // Add day header
-      days.push(`<div class="gantt-day-header" style="width: ${dayWidth}px; left: ${dayPosition}px; position: absolute;">${dayName}</div>`);
-      
-      // Add hours for this day - create all 24 hours and position them correctly
-      const dayHours = [];
-      for (let h = 0; h < 24; h++) {
-        const hourWidth = GANTT_CONFIG.hourWidth * ganttState.zoomLevel;
-        const hourPosition = (dayStartHour + h) * GANTT_CONFIG.hourWidth * ganttState.zoomLevel;
-        dayHours.push(`<div class="gantt-hour-header" style="width: ${hourWidth}px; left: ${hourPosition}px; position: absolute; z-index: 10;">${h}</div>`);
-      }
-      hours.push(`<div class="gantt-day-hours" style="width: ${dayWidth}px; position: relative; height: 30px; overflow: visible;"></div>`);
-      
-      // Add hours directly to the hours row for better positioning
-      headerHTML += dayHours.join('');
-      
-      current = current.add(1, 'day');
-    }
-    
-    headerHTML = `
-      <div class="gantt-days-row" style="position: relative;">${days.join('')}</div>
-      <div class="gantt-hours-row" style="position: relative; height: 30px;">${headerHTML}</div>
-    `;
-  } else {
-    // Single line for days only
-    const days = [];
-    let current = startDate.clone();
-    while (current.isBefore(endDate) || current.isSame(endDate, 'day')) {
-      const dayName = current.format('ddd DD/MM');
-      const dayWidth = 24 * GANTT_CONFIG.hourWidth * ganttState.zoomLevel;
-      days.push(`<div class="gantt-day-header" style="width: ${dayWidth}px;">${dayName}</div>`);
-      current = current.add(1, 'day');
-    }
-    
-    headerHTML = `<div class="gantt-days-row">${days.join('')}</div>`;
-  }
+    cumulativePosition += dayWidth;
+  });
+  
+  headerHTML = `
+    <div class="gantt-days-row" style="position: relative;">${days.join('')}</div>
+    <div class="gantt-hours-row" style="position: relative; height: 30px;">${headerHTML}</div>
+  `;
   
   header.innerHTML = headerHTML;
   
@@ -371,50 +366,89 @@ function renderGanttTasks() {
     }
   });
   
-  // Add drop zone handlers to grid
+  // Add drop zone handlers to grid (with throttling for performance)
+  let dragoverThrottle = null;
+  let gridRect = null;
+  
   grid.addEventListener('dragover', (e) => {
     e.preventDefault();
+    
+    // Throttle expensive operations to every 50ms
+    if (dragoverThrottle) return;
+    
+    dragoverThrottle = setTimeout(() => {
+      dragoverThrottle = null;
+    }, 50);
+    
+    // Cache grid rect to avoid repeated getBoundingClientRect calls
+    if (!gridRect) {
+      gridRect = grid.getBoundingClientRect();
+    }
+    
     const offset = parseInt(e.dataTransfer.getData('text/offset')) || 0;
-    const dropPosition = e.clientX - grid.getBoundingClientRect().left - offset;
-    const hourWidth = GANTT_CONFIG.hourWidth * ganttState.zoomLevel;
-    const hours = Math.round(dropPosition / hourWidth);
-    const newStartTime = ganttState.startDate.clone().add(hours, 'hours');
+    const dropPosition = e.clientX - gridRect.left - offset;
     
     // Show drop position indicator
-    const indicator = document.getElementById('gantt-drop-indicator') || document.createElement('div');
-    indicator.id = 'gantt-drop-indicator';
-    indicator.style.cssText = `
-      position: absolute;
-      left: ${dropPosition}px;
-      top: 0;
-      bottom: 0;
-      width: 2px;
-      background: var(--pico-primary);
-      pointer-events: none;
-      z-index: 1000;
-    `;
-    if (!document.getElementById('gantt-drop-indicator')) {
+    let indicator = document.getElementById('gantt-drop-indicator');
+    if (!indicator) {
+      indicator = document.createElement('div');
+      indicator.id = 'gantt-drop-indicator';
+      indicator.style.cssText = `
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: var(--pico-primary);
+        pointer-events: none;
+        z-index: 1000;
+      `;
       grid.appendChild(indicator);
     }
+    indicator.style.left = dropPosition + 'px';
   });
   
   // Handle drop
   grid.addEventListener('drop', (e) => {
     e.preventDefault();
+    gridRect = null; // Reset cached rect
+    
     const jobId = e.dataTransfer.getData('text/plain');
     const offset = parseInt(e.dataTransfer.getData('text/offset')) || 0;
     const dropPosition = e.clientX - grid.getBoundingClientRect().left - offset;
-    const hourWidth = GANTT_CONFIG.hourWidth * ganttState.zoomLevel;
+    const hourWidth = GANTT_CONFIG.hourWidth;
     const hours = Math.round(dropPosition / hourWidth);
-    const newStartTime = ganttState.startDate.clone().add(hours, 'hours');
+    
+    // Calculate new time based on compressed days
+    const daysWithJobs = getDaysWithJobs();
+    const cumulativeHours = hours;
+    let newStartTime = null;
+    let remainingHours = cumulativeHours;
+    
+    for (let i = 0; i < daysWithJobs.length; i++) {
+      if (remainingHours < 24) {
+        newStartTime = daysWithJobs[i].clone().add(remainingHours, 'hours');
+        break;
+      }
+      remainingHours -= 24;
+    }
+    
+    if (!newStartTime && daysWithJobs.length > 0) {
+      newStartTime = daysWithJobs[daysWithJobs.length - 1].clone().add(remainingHours, 'hours');
+    }
     
     // Update job time
-    const job = JOBS.find(j => j.id === jobId);
-    if (job) {
-      const duration = dayjs(job.end).diff(dayjs(job.start), 'hours');
-      job.start = newStartTime.format();
-      job.end = newStartTime.add(duration, 'hours').format();
-      refreshAll();
+    if (newStartTime) {
+      const job = JOBS.find(j => j.id === jobId);
+      if (job) {
+        saveToUndoHistory('drag-gantt');
+        const duration = dayjs(job.end).diff(dayjs(job.start), 'hours');
+        job.start = newStartTime.format();
+        job.end = newStartTime.add(duration, 'hours').format();
+        
+        // Only refresh Gantt, not entire app (performance)
+        renderGantt();
+        saveToLocalStorage();
+      }
     }
     
     // Remove drop indicator
@@ -426,10 +460,16 @@ function renderGanttTasks() {
   
   // Remove drop indicator when dragging leaves the grid
   grid.addEventListener('dragleave', (e) => {
+    gridRect = null; // Reset cached rect
     const indicator = document.getElementById('gantt-drop-indicator');
     if (indicator) {
       indicator.remove();
     }
+  });
+  
+  // Reset grid rect when drag ends
+  grid.addEventListener('dragend', () => {
+    gridRect = null;
   });
   
   // Auto-scroll to first task with delay to ensure rendering is complete
@@ -477,9 +517,16 @@ function createGanttTaskBar(job, index) {
   const position = calculateGanttTaskPosition(startTime);
   const width = calculateGanttTaskWidth(startTime, endTime);
   
-  // Get conflicts and dependency issues for CSS classes
-  const conflicts = recomputeConflicts();
-  const depIssues = recomputeDependencyIssues();
+  // Get conflicts and dependency issues from cache (performance optimization)
+  if (!ganttState.conflictsCache) {
+    ganttState.conflictsCache = recomputeConflicts();
+  }
+  if (!ganttState.depIssuesCache) {
+    ganttState.depIssuesCache = recomputeDependencyIssues();
+  }
+  
+  const conflicts = ganttState.conflictsCache;
+  const depIssues = ganttState.depIssuesCache;
   const isConflict = conflicts.has(job.id);
   const isDepIssue = depIssues.has(job.id);
   const isFinished = job.finished;
@@ -521,17 +568,44 @@ function createGanttTaskBar(job, index) {
   `;
 }
 
-// Calculate task position on Gantt
+// Calculate task position on Gantt (compressed to only show days with jobs)
 function calculateGanttTaskPosition(startTime) {
-  const ganttStart = ganttState.startDate;
-  const diff = startTime.diff(ganttStart, 'hours', true);
-  return diff * GANTT_CONFIG.hourWidth * ganttState.zoomLevel;
+  const daysWithJobs = getDaysWithJobs();
+  if (daysWithJobs.length === 0) return 0;
+  
+  const taskDay = startTime.clone().startOf('day');
+  
+  // Find which displayed day this task starts on
+  let cumulativeHours = 0;
+  let found = false;
+  
+  for (let i = 0; i < daysWithJobs.length; i++) {
+    const displayDay = daysWithJobs[i];
+    
+    if (taskDay.isSame(displayDay, 'day')) {
+      // Task starts on this displayed day
+      const hoursIntoDay = startTime.hour() + (startTime.minute() / 60);
+      cumulativeHours += hoursIntoDay;
+      found = true;
+      break;
+    } else if (displayDay.isBefore(taskDay, 'day')) {
+      // This displayed day is before our task day, add full 24 hours
+      cumulativeHours += 24;
+    }
+  }
+  
+  if (!found) {
+    // If task day not found in displayed days, position at end
+    cumulativeHours = daysWithJobs.length * 24;
+  }
+  
+  return cumulativeHours * GANTT_CONFIG.hourWidth;
 }
 
 // Calculate task width on Gantt
 function calculateGanttTaskWidth(startTime, endTime) {
   const duration = endTime.diff(startTime, 'hours', true);
-  return Math.max(20, duration * GANTT_CONFIG.hourWidth * ganttState.zoomLevel);
+  return Math.max(20, duration * GANTT_CONFIG.hourWidth);
 }
 
 // Get task color based on job properties
@@ -592,43 +666,28 @@ function getGanttTaskColor(job) {
 
 // Get Gantt width
 function getGanttWidth() {
-  const duration = ganttState.endDate.diff(ganttState.startDate, 'hours', true);
-  return duration * GANTT_CONFIG.hourWidth * ganttState.zoomLevel;
+  const daysWithJobs = getDaysWithJobs();
+  if (daysWithJobs.length === 0) return 0;
+  
+  // Width is number of displayed days * 24 hours * hour width
+  return daysWithJobs.length * 24 * GANTT_CONFIG.hourWidth;
 }
 
-// Add vertical grid lines for hours
+// Add vertical grid lines for hours (optimized for compressed days)
 function addVerticalGridLines(grid) {
   // Remove existing grid lines
   grid.querySelectorAll('.gantt-vertical-line').forEach(line => line.remove());
   
-  const startDate = ganttState.startDate;
-  const endDate = ganttState.endDate;
+  const daysWithJobs = getDaysWithJobs();
+  if (daysWithJobs.length === 0) return;
   
-  // Calculate the actual time range based on tasks
-  const allJobs = getGanttJobs();
-  let actualStart = startDate;
-  let actualEnd = endDate;
+  // Add a line for each hour in the displayed days
+  let cumulativeHours = 0;
   
-  if (allJobs.length > 0) {
-    const jobTimes = allJobs
-      .filter(job => job.start && job.end)
-      .map(job => ({ start: dayjs(job.start), end: dayjs(job.end) }))
-      .filter(job => job.start.isValid() && job.end.isValid());
-    
-    if (jobTimes.length > 0) {
-      actualStart = dayjs.min(jobTimes.map(j => j.start));
-      actualEnd = dayjs.max(jobTimes.map(j => j.end));
-    }
-  }
-  
-  // Create grid lines for the actual time range
-  let current = actualStart.clone().startOf('hour');
-  const endTime = actualEnd.clone().endOf('hour');
-  
-  while (current.isBefore(endTime) || current.isSame(endTime, 'hour')) {
-    const position = calculateGanttTaskPosition(current);
-    // Only add lines if they're within the visible range
-    if (position >= 0 && position <= getGanttWidth()) {
+  daysWithJobs.forEach(dayDate => {
+    for (let h = 0; h < 24; h++) {
+      const position = (cumulativeHours + h) * GANTT_CONFIG.hourWidth;
+      
       const line = document.createElement('div');
       line.className = 'gantt-vertical-line';
       line.style.cssText = `
@@ -643,9 +702,8 @@ function addVerticalGridLines(grid) {
       `;
       grid.appendChild(line);
     }
-    
-    current = current.add(1, 'hour');
-  }
+    cumulativeHours += 24;
+  });
 }
 
 // Auto-scroll to first task
@@ -740,7 +798,7 @@ function handleResize(e) {
   
   // Calculate pixel difference
   const dx = e.clientX - resizeState.startX;
-  const hourWidth = GANTT_CONFIG.hourWidth * ganttState.zoomLevel;
+  const hourWidth = GANTT_CONFIG.hourWidth;
   const hoursDiff = Math.round(dx / hourWidth);
   
   if (resizeState.edge === 'start') {

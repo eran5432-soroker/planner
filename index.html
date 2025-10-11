@@ -100,6 +100,7 @@
       </div>
       <div class="filter-actions">
         <button class="btn" id="btnClearFilters">נקה סינון</button>
+        <button class="btn" id="btnUndo" title="ביטול פעולה אחרונה (Ctrl+Z)">↶ שחזר</button>
         <div class="spacer"></div>
         <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none" />
         <button class="btn" id="btnImport">📥 ייבוא Excel</button>
@@ -187,7 +188,10 @@
       <div id="view-timeline" style="display:none; margin-top:12px;">
         <div class="timeline-head">
           <label>תאריך</label>
+          <button id="btnPrevDay" class="btn-icon" title="יום קודם" style="margin: 0 0.5rem; font-size: 1.2rem;">→</button>
           <input id="tl-date" type="date" />
+          <button id="btnNextDay" class="btn-icon" title="יום הבא" style="margin: 0 0.5rem; font-size: 1.2rem;">←</button>
+          <button id="btnToday" class="btn" style="margin: 0 0.5rem;">היום</button>
           <span class="muted">כל נתיב הוא עובד מבצע • סולם 24 שעות • ירוק = הושלם • אדום = קונפליקט • כתום = בעיות תלות • צהוב = שבת • 🖱️ גרור ושחרר לשינוי זמן</span>
         </div>
         <div class="timeline-scroll-top-wrapper">
@@ -209,15 +213,10 @@
             <input id="gantt-end-date" type="date" />
             <button id="gantt-apply-dates" class="btn primary">החל</button>
           </div>
-          <div class="gantt-zoom-controls">
-            <button id="gantt-zoom-out" class="btn" title="הקטן">-</button>
-            <span id="gantt-zoom-level">100%</span>
-            <button id="gantt-zoom-in" class="btn" title="הגדל">+</button>
-          </div>
           <div class="gantt-scale-controls">
             <label class="switch">
-              <input type="checkbox" id="gantt-show-hours" checked />
-              הצג שעות
+              <input type="checkbox" id="gantt-show-empty-days" />
+              הצג ימים ריקים
             </label>
           </div>
         </div>
@@ -365,6 +364,14 @@
 
   <div class="footer">טיפ: דיוק הזמן מקובע ל-15 דקות. חפיפות לאותו עובד מבצע מסומנות כקונפליקט (אדום). יום שישי 18:00-23:59 ושבת מסומנים (צהוב).</div>
 
+  <!-- Utility modules -->
+  <script src="utils/dateUtils.js"></script>
+  <script src="utils/validation.js"></script>
+  
+  <!-- Service modules -->
+  <script src="services/StorageService.js"></script>
+  <script src="services/UndoService.js"></script>
+  
   <!-- Application script -->
   <script src="script.js"></script>
   <script src="gantt.js"></script>

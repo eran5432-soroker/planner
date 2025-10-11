@@ -11,6 +11,10 @@ const TZ = 'Asia/Jerusalem';
 let JOBS = [];
 let nextId = 1;
 
+// Undo history
+let UNDO_HISTORY = [];
+const MAX_UNDO_HISTORY = 20;
+
 // Store for factories, workers, managers, and departments
 let FACTORIES = new Set();
 let WORKERS = new Set();
@@ -460,6 +464,7 @@ function renderTable(){
       <td data-column="flags">${flags}</td>
       <td class="actions" data-column="actions">
         <button class="${finishClass}" data-act="finish" data-id="${j.id}" title="${finishTitle}">${finishIcon}</button>
+        <button class="btn-icon" data-act="clone" data-id="${j.id}" title="שכפל משימה">📋</button>
         <button class="btn-icon" data-act="edit" data-id="${j.id}" title="ערוך משימה">✎</button>
         <button class="btn-icon btn-icon-danger" data-act="del" data-id="${j.id}" title="מחק משימה">✕</button>
       </td>`;
@@ -978,6 +983,76 @@ function saveToLocalStorage(){
   localStorage.setItem('jobs.v1', JSON.stringify(data));
 }
 
+// Save state to undo history
+function saveToUndoHistory(action = 'modify') {
+  const state = {
+    action,
+    timestamp: Date.now(),
+    jobs: JSON.parse(JSON.stringify(JOBS)),
+    factories: Array.from(FACTORIES),
+    workers: Array.from(WORKERS),
+    factoryManagers: Array.from(FACTORY_MANAGERS),
+    maintenanceManagers: Array.from(MAINTENANCE_MANAGERS),
+    departments: Array.from(DEPARTMENTS)
+  };
+  
+  UNDO_HISTORY.push(state);
+  
+  // Keep only last MAX_UNDO_HISTORY items
+  if (UNDO_HISTORY.length > MAX_UNDO_HISTORY) {
+    UNDO_HISTORY.shift();
+  }
+}
+
+// Undo last action
+function undoLastAction() {
+  if (UNDO_HISTORY.length === 0) {
+    alert('אין פעולה לביטול');
+    return;
+  }
+  
+  const previousState = UNDO_HISTORY.pop();
+  
+  // Restore state
+  JOBS = JSON.parse(JSON.stringify(previousState.jobs));
+  FACTORIES = new Set(previousState.factories);
+  WORKERS = new Set(previousState.workers);
+  FACTORY_MANAGERS = new Set(previousState.factoryManagers);
+  MAINTENANCE_MANAGERS = new Set(previousState.maintenanceManagers);
+  DEPARTMENTS = new Set(previousState.departments);
+  
+  // Update next ID
+  nextId = 1 + Math.max(0, ...JOBS.map(j=>+j.id||0));
+  
+  refreshAll();
+}
+
+// Clone a job
+function cloneJob(jobId) {
+  const job = JOBS.find(j => j.id === jobId);
+  if (!job) return;
+  
+  // Save current state for undo
+  saveToUndoHistory('clone');
+  
+  // Create a clone with new ID and adjusted time
+  const clone = {
+    ...JSON.parse(JSON.stringify(job)),
+    id: uid(),
+    title: job.title + ' (עותק)',
+    finished: false
+  };
+  
+  // If job has dates, add 1 hour to both start and end
+  if (clone.start && clone.end) {
+    clone.start = dayjs(clone.start).add(1, 'hour').format();
+    clone.end = dayjs(clone.end).add(1, 'hour').format();
+  }
+  
+  JOBS.push(clone);
+  refreshAll();
+}
+
 function refreshAll(){
   refreshFilters();
   renderTable();
@@ -1232,6 +1307,9 @@ function makeEditableDate(cell) {
   const saveChanges = () => {
     const newValue = input.value;
     if (newValue && newValue !== formattedValue) {
+      // Save to undo history
+      saveToUndoHistory('edit-date');
+      
       // Round to 15 minutes
       const rounded = roundTo15(newValue);
       
@@ -1786,6 +1864,10 @@ function initEventListeners(){
     const data = getForm();
     const vr = validateRange(data.start, data.end);
     if(!vr.ok){ alert(vr.msg); return; }
+    
+    // Save to undo history before making changes
+    saveToUndoHistory(editingId ? 'edit' : 'create');
+    
     if(editingId){
       const i = JOBS.findIndex(x=>x.id===editingId);
       if(i>=0) JOBS[i] = { ...JOBS[i], ...data };
@@ -1886,12 +1968,19 @@ function initEventListeners(){
     const job = JOBS.find(j=>j.id===id);
     if(!job) return;
     if(act==='finish'){
+      saveToUndoHistory('finish');
       job.finished = !job.finished;
       refreshAll();
+    } else if(act==='clone'){
+      cloneJob(id);
     } else if(act==='edit'){
       openJobModal(job);
     } else if(act==='del'){
-      if(confirm('למחוק משימה זו?')){ JOBS = JOBS.filter(j=>j.id!==id); refreshAll(); }
+      if(confirm('למחוק משימה זו?')){ 
+        saveToUndoHistory('delete');
+        JOBS = JOBS.filter(j=>j.id!==id); 
+        refreshAll(); 
+      }
     }
   });
 
@@ -1920,6 +2009,9 @@ function initEventListeners(){
     renderTimeline();
     updateColumnVisibility();
   });
+  
+  // Undo button
+  $('#btnUndo').addEventListener('click', undoLastAction);
 
   // Tabs
   $$('.tab').forEach(tab=> tab.addEventListener('click', ()=>{
@@ -1940,6 +2032,26 @@ function initEventListeners(){
   // Timeline date default = today
   const todayStr = dayjs().format('YYYY-MM-DD'); $('#tl-date').value = todayStr;
   $('#tl-date').addEventListener('input', renderTimeline);
+  
+  // Today button
+  $('#btnToday').addEventListener('click', () => {
+    $('#tl-date').value = dayjs().format('YYYY-MM-DD');
+    renderTimeline();
+  });
+  
+  // Previous day button (left arrow)
+  $('#btnPrevDay').addEventListener('click', () => {
+    const currentDate = $('#tl-date').value || dayjs().format('YYYY-MM-DD');
+    $('#tl-date').value = dayjs(currentDate).subtract(1, 'day').format('YYYY-MM-DD');
+    renderTimeline();
+  });
+  
+  // Next day button (right arrow)
+  $('#btnNextDay').addEventListener('click', () => {
+    const currentDate = $('#tl-date').value || dayjs().format('YYYY-MM-DD');
+    $('#tl-date').value = dayjs(currentDate).add(1, 'day').format('YYYY-MM-DD');
+    renderTimeline();
+  });
 
   // Import/Export
   $('#btnImport').addEventListener('click', ()=> $('#fileInput').click());
@@ -2064,6 +2176,27 @@ function initEventListeners(){
 
   // Handle theme toggle
   $('#themeToggle').addEventListener('click', toggleTheme);
+  
+  // Global keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    // Ctrl+Z or Cmd+Z for undo
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      undoLastAction();
+    }
+    
+    // Arrow keys for timeline navigation (when timeline is visible)
+    const timelineView = $('#view-timeline');
+    if (timelineView && timelineView.style.display !== 'none') {
+      if (e.key === 'ArrowLeft' && !e.target.matches('input, textarea, select')) {
+        e.preventDefault();
+        $('#btnPrevDay').click();
+      } else if (e.key === 'ArrowRight' && !e.target.matches('input, textarea, select')) {
+        e.preventDefault();
+        $('#btnNextDay').click();
+      }
+    }
+  });
 }
 
 async function handleFile(evt){
