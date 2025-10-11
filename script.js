@@ -1756,19 +1756,125 @@ function toggleTheme() {
   setTheme(newTheme);
 }
 
+// Auto-load db.xlsx if it exists
+async function autoLoadDatabase() {
+  try {
+    const response = await fetch('db.xlsx');
+    if (!response.ok) {
+      return false;
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    const wb = XLSX.read(arrayBuffer, { type: 'array' });
+    const wsName = wb.SheetNames[0];
+    const ws = wb.Sheets[wsName];
+    const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    
+    if (!json.length) {
+      console.log('db.xlsx is empty');
+      return false;
+    }
+    
+    // Column mapping - auto-detect common patterns
+    const headers = Object.keys(json[0]);
+    const findCol = (patterns) => headers.find(h => patterns.some(p => p.test(h))) || '';
+    
+    const colTitle = findCol([/title|job|task|משימה|name|שם/i]);
+    const colFactory = findCol([/factory|מפעל|plant|facility/i]);
+    const colWorker = findCol([/worker|עובד|employee|staff|מבצע|executor/i]);
+    const colFactoryManager = findCol([/factory.*manager|מפקח|supervisor|supervise|מנהל.*מפעל/i]);
+    const colMaintenanceManager = findCol([/maintenance.*manager|מנהל.*עבודה|maintenance|אחזקה/i]);
+    const colPriority = findCol([/priority|עדיפות|urgent|importance/i]);
+    const colEquipmentNumber = findCol([/equipment|ציוד|number|מספר|machine|device|מכונה/i]);
+    const colServiceCall = findCol([/service.*call|קריאת.*שירות|service|ticket|call|שירות/i]);
+    const colDepartment = findCol([/department|מחלקה|dept|unit|יחידה/i]);
+    const colStart = findCol([/start|begin|התחלה|from|start.*time|start.*date/i]);
+    const colEnd = findCol([/end|finish|סיום|to|end.*time|end.*date|due/i]);
+    const colDependsOn = findCol([/depend|תלוי|dependency|prerequisite|קודם/i]);
+    const colNotes = findCol([/note|remark|remarks|הערה|comment|comments|הערות|תיאור|description|desc|details|פרטים/i]);
+    
+    // Clear existing data before importing
+    JOBS = [];
+    FACTORIES.clear();
+    WORKERS.clear();
+    FACTORY_MANAGERS.clear();
+    MAINTENANCE_MANAGERS.clear();
+    DEPARTMENTS.clear();
+    nextId = 1;
+    
+    // Import data
+    const imported = json.map(row => {
+      const factory = String(row[colFactory] || '').trim();
+      const workerStr = String(row[colWorker] || '').trim();
+      const workers = workerStr ? workerStr.split(/[,;]/).map(w => w.trim()).filter(Boolean) : [];
+      const factoryManager = String(row[colFactoryManager] || '').trim();
+      const maintenanceManager = String(row[colMaintenanceManager] || '').trim();
+      const department = String(row[colDepartment] || '').trim();
+      
+      // Add to sets
+      if (factory) FACTORIES.add(factory);
+      workers.forEach(w => { if (w) WORKERS.add(w); });
+      if (factoryManager) FACTORY_MANAGERS.add(factoryManager);
+      if (maintenanceManager) MAINTENANCE_MANAGERS.add(maintenanceManager);
+      if (department) DEPARTMENTS.add(department);
+      
+      // Parse dates
+      let startDate = '';
+      let endDate = '';
+      if (colStart && row[colStart]) {
+        const start = dayjs(row[colStart]);
+        startDate = start.isValid() ? start.format() : '';
+      }
+      if (colEnd && row[colEnd]) {
+        const end = dayjs(row[colEnd]);
+        endDate = end.isValid() ? end.format() : '';
+      }
+      
+      return {
+        id: uid(),
+        title: String(row[colTitle] || '').trim(),
+        factory: factory,
+        workers: workers,
+        factoryManager: factoryManager,
+        maintenanceManager: maintenanceManager,
+        priority: String(row[colPriority] || '').trim(),
+        equipmentNumber: String(row[colEquipmentNumber] || '').trim(),
+        serviceCall: String(row[colServiceCall] || '').trim(),
+        department: department,
+        start: startDate,
+        end: endDate,
+        dependsOn: String(row[colDependsOn] || '').trim(),
+        notes: String(row[colNotes] || '').trim(),
+        finished: false
+      };
+    });
+    
+    JOBS = imported;
+    console.log(`Loaded ${imported.length} jobs from db.xlsx`);
+    return true;
+  } catch (error) {
+    console.log('db.xlsx not found or error loading:', error.message);
+    return false;
+  }
+}
+
 // Initialize on DOM ready
-document.addEventListener('DOMContentLoaded', ()=>{
+document.addEventListener('DOMContentLoaded', async ()=>{
   // Initialize theme
   initTheme();
   
   // Load column visibility settings
   loadColumnVisibility();
   
-  // Try to load from localStorage first, if not found, seed with demo data
-  const loaded = loadFromLocalStorage();
-  if(!loaded) {
-    seed();
+  // Try to load from db.xlsx first, then localStorage, then seed with demo data
+  const dbLoaded = await autoLoadDatabase();
+  if (!dbLoaded) {
+    const localStorageLoaded = loadFromLocalStorage();
+    if (!localStorageLoaded) {
+      seed();
+    }
   }
+  
   initEventListeners();
   refreshAll();
 });
