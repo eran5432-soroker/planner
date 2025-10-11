@@ -444,19 +444,19 @@ function renderTable(){
     
     tr.innerHTML = `
       <td>${idx+1}</td>
-      <td data-column="title">${isFinished ? '<s>'+escapeHtml(j.title||'')+'</s>' : escapeHtml(j.title||'')}</td>
-      <td data-column="factory">${escapeHtml(j.factory||'')}</td>
-      <td data-column="worker">${escapeHtml(workersDisplay)}</td>
-      <td data-column="factoryManager">${escapeHtml(j.factoryManager||'')}</td>
-      <td data-column="maintenanceManager">${escapeHtml(j.maintenanceManager||'')}</td>
-      <td data-column="priority">${escapeHtml(j.priority||'')}</td>
-      <td data-column="equipmentNumber">${escapeHtml(j.equipmentNumber||'')}</td>
-      <td data-column="serviceCall">${escapeHtml(j.serviceCall||'')}</td>
-      <td data-column="department">${escapeHtml(j.department||'')}</td>
-      <td data-column="start">${escapeHtml(fmt(j.start))}</td>
-      <td data-column="end">${escapeHtml(fmt(j.end))}</td>
+      <td data-column="title" class="editable-text" data-job-id="${j.id}" data-field="title" title="לחץ לעריכה">${isFinished ? '<s>'+escapeHtml(j.title||'')+'</s>' : escapeHtml(j.title||'')}</td>
+      <td data-column="factory" class="editable-dropdown" data-job-id="${j.id}" data-field="factory" data-type="factory" title="לחץ לעריכה">${escapeHtml(j.factory||'')}</td>
+      <td data-column="worker" class="editable-worker" data-job-id="${j.id}" title="לחץ לעריכה">${escapeHtml(workersDisplay)}</td>
+      <td data-column="factoryManager" class="editable-dropdown" data-job-id="${j.id}" data-field="factoryManager" data-type="factoryManager" title="לחץ לעריכה">${escapeHtml(j.factoryManager||'')}</td>
+      <td data-column="maintenanceManager" class="editable-dropdown" data-job-id="${j.id}" data-field="maintenanceManager" data-type="maintenanceManager" title="לחץ לעריכה">${escapeHtml(j.maintenanceManager||'')}</td>
+      <td data-column="priority" class="editable-dropdown" data-job-id="${j.id}" data-field="priority" data-type="priority" title="לחץ לעריכה">${escapeHtml(j.priority||'')}</td>
+      <td data-column="equipmentNumber" class="editable-text" data-job-id="${j.id}" data-field="equipmentNumber" title="לחץ לעריכה">${escapeHtml(j.equipmentNumber||'')}</td>
+      <td data-column="serviceCall" class="editable-text" data-job-id="${j.id}" data-field="serviceCall" title="לחץ לעריכה">${escapeHtml(j.serviceCall||'')}</td>
+      <td data-column="department" class="editable-dropdown" data-job-id="${j.id}" data-field="department" data-type="department" title="לחץ לעריכה">${escapeHtml(j.department||'')}</td>
+      <td data-column="start" class="editable-date" data-job-id="${j.id}" data-field="start" title="לחץ לעריכה">${escapeHtml(fmt(j.start))}</td>
+      <td data-column="end" class="editable-date" data-job-id="${j.id}" data-field="end" title="לחץ לעריכה">${escapeHtml(fmt(j.end))}</td>
       <td data-column="duration">${escapeHtml(dur)}</td>
-      <td data-column="notes">${escapeHtml(j.notes||'')}</td>
+      <td data-column="notes" class="editable-text" data-job-id="${j.id}" data-field="notes" title="לחץ לעריכה">${escapeHtml(j.notes||'')}</td>
       <td data-column="flags">${flags}</td>
       <td class="actions" data-column="actions">
         <button class="${finishClass}" data-act="finish" data-id="${j.id}" title="${finishTitle}">${finishIcon}</button>
@@ -1198,6 +1198,578 @@ function setupTimelineScrollSync() {
   window.addEventListener('resize', syncWidth);
 }
 
+// Inline date editing functionality
+function makeEditableDate(cell) {
+  const jobId = cell.dataset.jobId;
+  const field = cell.dataset.field;
+  const job = JOBS.find(j => j.id === jobId);
+  if (!job) return;
+  
+  const currentValue = job[field];
+  const formattedValue = currentValue ? dayjs(currentValue).format('YYYY-MM-DDTHH:mm') : '';
+  
+  // Save original content
+  const originalContent = cell.innerHTML;
+  
+  // Create input element
+  const input = document.createElement('input');
+  input.type = 'datetime-local';
+  input.step = '900'; // 15 minute steps
+  input.value = formattedValue;
+  input.style.width = '100%';
+  input.style.padding = '0.25rem';
+  input.style.border = '2px solid var(--pico-primary)';
+  input.style.borderRadius = '0.25rem';
+  input.style.background = 'var(--pico-background)';
+  input.style.color = 'var(--pico-color)';
+  
+  // Replace cell content with input
+  cell.innerHTML = '';
+  cell.appendChild(input);
+  input.focus();
+  
+  // Function to save changes
+  const saveChanges = () => {
+    const newValue = input.value;
+    if (newValue && newValue !== formattedValue) {
+      // Round to 15 minutes
+      const rounded = roundTo15(newValue);
+      
+      // Update job
+      const jobIndex = JOBS.findIndex(j => j.id === jobId);
+      if (jobIndex >= 0) {
+        JOBS[jobIndex][field] = rounded;
+        
+        // Validate range
+        const start = JOBS[jobIndex].start;
+        const end = JOBS[jobIndex].end;
+        if (start && end && !dayjs(end).isAfter(dayjs(start))) {
+          alert('הסיום חייב להיות אחרי ההתחלה');
+          // Restore original value
+          JOBS[jobIndex][field] = currentValue;
+        }
+        
+        refreshAll();
+      }
+    } else {
+      // Restore original content if no changes or cancelled
+      cell.innerHTML = originalContent;
+    }
+  };
+  
+  // Save on blur (clicking away)
+  input.addEventListener('blur', () => {
+    setTimeout(saveChanges, 100);
+  });
+  
+  // Save on Enter key
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      input.blur();
+    } else if (e.key === 'Escape') {
+      cell.innerHTML = originalContent;
+    }
+  });
+}
+
+// Inline worker editing functionality
+function makeEditableWorker(cell) {
+  const jobId = cell.dataset.jobId;
+  const job = JOBS.find(j => j.id === jobId);
+  if (!job) return;
+  
+  const currentWorkers = Array.isArray(job.workers) ? job.workers : (job.worker ? [job.worker] : []);
+  const selectedWorkers = new Set(currentWorkers);
+  
+  // Save original content
+  const originalContent = cell.innerHTML;
+  
+  // Create a dropdown container
+  const container = document.createElement('div');
+  container.className = 'inline-worker-editor';
+  container.style.position = 'relative';
+  container.style.width = '100%';
+  
+  // Create display element (shows selected workers)
+  const display = document.createElement('div');
+  display.className = 'inline-worker-display';
+  display.style.padding = '0.5rem 0.75rem';
+  display.style.border = '2px solid var(--pico-primary)';
+  display.style.borderRadius = '0.25rem';
+  display.style.background = 'var(--pico-background)';
+  display.style.color = 'var(--pico-color)';
+  display.style.minHeight = '42px';
+  display.style.display = 'flex';
+  display.style.alignItems = 'center';
+  display.style.flexWrap = 'wrap';
+  display.style.gap = '0.25rem';
+  display.style.cursor = 'pointer';
+  
+  // Function to update display
+  const updateDisplay = () => {
+    if (selectedWorkers.size === 0) {
+      display.innerHTML = '<span style="color: var(--pico-muted-color); font-style: italic;">בחר עובדים...</span>';
+    } else {
+      display.innerHTML = Array.from(selectedWorkers).map(worker => 
+        `<span class="inline-worker-tag" style="display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.5rem; background: var(--pico-primary-background); color: var(--pico-primary-inverse); border-radius: 0.25rem; font-size: 0.875rem;">
+          ${escapeHtml(worker)}
+          <span class="inline-worker-remove" data-worker="${escapeHtml(worker)}" style="cursor: pointer; font-weight: bold; opacity: 0.8; padding: 0 0.25rem;">×</span>
+        </span>`
+      ).join('');
+      
+      // Add remove handlers
+      display.querySelectorAll('.inline-worker-remove').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const worker = btn.dataset.worker;
+          selectedWorkers.delete(worker);
+          updateDisplay();
+        });
+      });
+    }
+  };
+  
+  updateDisplay();
+  
+  // Create dropdown for worker checkboxes
+  const dropdown = document.createElement('div');
+  dropdown.className = 'inline-worker-dropdown';
+  dropdown.style.position = 'absolute';
+  dropdown.style.top = '100%';
+  dropdown.style.left = '0';
+  dropdown.style.right = '0';
+  dropdown.style.marginTop = '0.25rem';
+  dropdown.style.background = 'var(--pico-card-background-color)';
+  dropdown.style.border = '1px solid var(--pico-muted-border-color)';
+  dropdown.style.borderRadius = '0.25rem';
+  dropdown.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+  dropdown.style.maxHeight = '250px';
+  dropdown.style.overflowY = 'auto';
+  dropdown.style.zIndex = '1000';
+  dropdown.style.display = 'none';
+  
+  // Create options container
+  const optionsContainer = document.createElement('div');
+  optionsContainer.style.padding = '0.5rem';
+  
+  // Populate dropdown with worker checkboxes
+  const workers = Array.from(WORKERS).sort();
+  workers.forEach(worker => {
+    const option = document.createElement('div');
+    option.className = 'inline-worker-option';
+    option.style.display = 'flex';
+    option.style.alignItems = 'center';
+    option.style.gap = '0.5rem';
+    option.style.padding = '0.5rem';
+    option.style.borderRadius = '0.25rem';
+    option.style.cursor = 'pointer';
+    option.style.transition = 'background-color 0.2s';
+    
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.id = `inline-worker-${worker}`;
+    checkbox.checked = selectedWorkers.has(worker);
+    checkbox.style.margin = '0';
+    checkbox.style.cursor = 'pointer';
+    
+    const label = document.createElement('label');
+    label.htmlFor = `inline-worker-${worker}`;
+    label.textContent = worker;
+    label.style.cursor = 'pointer';
+    label.style.margin = '0';
+    label.style.flex = '1';
+    
+    option.addEventListener('mouseenter', () => {
+      option.style.background = 'var(--pico-card-sectioning-background-color)';
+    });
+    
+    option.addEventListener('mouseleave', () => {
+      option.style.background = '';
+    });
+    
+    checkbox.addEventListener('change', (e) => {
+      e.stopPropagation();
+      if (checkbox.checked) {
+        selectedWorkers.add(worker);
+      } else {
+        selectedWorkers.delete(worker);
+      }
+      updateDisplay();
+    });
+    
+    option.addEventListener('click', (e) => {
+      if (e.target !== checkbox) {
+        e.stopPropagation();
+        checkbox.checked = !checkbox.checked;
+        checkbox.dispatchEvent(new Event('change'));
+      }
+    });
+    
+    option.appendChild(checkbox);
+    option.appendChild(label);
+    optionsContainer.appendChild(option);
+  });
+  
+  dropdown.appendChild(optionsContainer);
+  
+  // Add "Add new worker" button
+  const addNewButton = document.createElement('button');
+  addNewButton.textContent = '➕ הוסף עובד חדש';
+  addNewButton.style.width = '100%';
+  addNewButton.style.padding = '0.5rem';
+  addNewButton.style.margin = '0.5rem 0 0 0';
+  addNewButton.style.background = 'transparent';
+  addNewButton.style.border = '1px dashed var(--pico-muted-border-color)';
+  addNewButton.style.color = 'var(--pico-primary)';
+  addNewButton.style.cursor = 'pointer';
+  addNewButton.style.borderRadius = '0.25rem';
+  addNewButton.style.fontSize = '0.875rem';
+  
+  addNewButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const newWorker = prompt('הזן שם עובד מבצע חדש:');
+    if (newWorker && newWorker.trim()) {
+      WORKERS.add(newWorker.trim());
+      selectedWorkers.add(newWorker.trim());
+      
+      // Rebuild dropdown
+      optionsContainer.innerHTML = '';
+      const updatedWorkers = Array.from(WORKERS).sort();
+      updatedWorkers.forEach(worker => {
+        const option = document.createElement('div');
+        option.className = 'inline-worker-option';
+        option.style.display = 'flex';
+        option.style.alignItems = 'center';
+        option.style.gap = '0.5rem';
+        option.style.padding = '0.5rem';
+        option.style.borderRadius = '0.25rem';
+        option.style.cursor = 'pointer';
+        option.style.transition = 'background-color 0.2s';
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = `inline-worker-${worker}`;
+        checkbox.checked = selectedWorkers.has(worker);
+        checkbox.style.margin = '0';
+        checkbox.style.cursor = 'pointer';
+        
+        const label = document.createElement('label');
+        label.htmlFor = `inline-worker-${worker}`;
+        label.textContent = worker;
+        label.style.cursor = 'pointer';
+        label.style.margin = '0';
+        label.style.flex = '1';
+        
+        option.addEventListener('mouseenter', () => {
+          option.style.background = 'var(--pico-card-sectioning-background-color)';
+        });
+        
+        option.addEventListener('mouseleave', () => {
+          option.style.background = '';
+        });
+        
+        checkbox.addEventListener('change', (e) => {
+          e.stopPropagation();
+          if (checkbox.checked) {
+            selectedWorkers.add(worker);
+          } else {
+            selectedWorkers.delete(worker);
+          }
+          updateDisplay();
+        });
+        
+        option.addEventListener('click', (e) => {
+          if (e.target !== checkbox) {
+            e.stopPropagation();
+            checkbox.checked = !checkbox.checked;
+            checkbox.dispatchEvent(new Event('change'));
+          }
+        });
+        
+        option.appendChild(checkbox);
+        option.appendChild(label);
+        optionsContainer.appendChild(option);
+      });
+      
+      updateDisplay();
+    }
+  });
+  
+  dropdown.appendChild(addNewButton);
+  
+  container.appendChild(display);
+  container.appendChild(dropdown);
+  
+  // Replace cell content with container
+  cell.innerHTML = '';
+  cell.appendChild(container);
+  
+  // Toggle dropdown on display click
+  display.addEventListener('click', (e) => {
+    e.stopPropagation();
+    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+  });
+  
+  // Function to save changes
+  const saveChanges = () => {
+    const newWorkers = Array.from(selectedWorkers);
+    const originalWorkers = Array.isArray(job.workers) ? job.workers : (job.worker ? [job.worker] : []);
+    
+    // Check if there are changes
+    const hasChanges = newWorkers.length !== originalWorkers.length || 
+                       !newWorkers.every(w => originalWorkers.includes(w));
+    
+    if (hasChanges) {
+      // Update job
+      const jobIndex = JOBS.findIndex(j => j.id === jobId);
+      if (jobIndex >= 0) {
+        JOBS[jobIndex].workers = newWorkers;
+        refreshAll();
+      }
+    } else {
+      // Restore original content if no changes
+      cell.innerHTML = originalContent;
+    }
+  };
+  
+  // Close dropdown when clicking outside
+  const closeHandler = (e) => {
+    if (!container.contains(e.target)) {
+      dropdown.style.display = 'none';
+      saveChanges();
+      document.removeEventListener('click', closeHandler);
+    }
+  };
+  
+  // Add close handler after a short delay to avoid immediate closing
+  setTimeout(() => {
+    document.addEventListener('click', closeHandler);
+  }, 100);
+  
+  // Handle Escape key
+  const keyHandler = (e) => {
+    if (e.key === 'Escape') {
+      cell.innerHTML = originalContent;
+      document.removeEventListener('keydown', keyHandler);
+      document.removeEventListener('click', closeHandler);
+    }
+  };
+  
+  document.addEventListener('keydown', keyHandler);
+}
+
+// Inline text editing functionality
+function makeEditableText(cell) {
+  const jobId = cell.dataset.jobId;
+  const field = cell.dataset.field;
+  const job = JOBS.find(j => j.id === jobId);
+  if (!job) return;
+  
+  const currentValue = job[field] || '';
+  
+  // Save original content
+  const originalContent = cell.innerHTML;
+  
+  // Create input element
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = currentValue;
+  input.style.width = '100%';
+  input.style.padding = '0.25rem';
+  input.style.border = '2px solid var(--pico-primary)';
+  input.style.borderRadius = '0.25rem';
+  input.style.background = 'var(--pico-background)';
+  input.style.color = 'var(--pico-color)';
+  input.style.fontSize = '0.875rem';
+  
+  // Replace cell content with input
+  cell.innerHTML = '';
+  cell.appendChild(input);
+  input.focus();
+  input.select();
+  
+  // Function to save changes
+  const saveChanges = () => {
+    const newValue = input.value.trim();
+    if (newValue !== currentValue) {
+      // Update job
+      const jobIndex = JOBS.findIndex(j => j.id === jobId);
+      if (jobIndex >= 0) {
+        JOBS[jobIndex][field] = newValue;
+        refreshAll();
+      }
+    } else {
+      // Restore original content if no changes
+      cell.innerHTML = originalContent;
+    }
+  };
+  
+  // Save on blur (clicking away)
+  input.addEventListener('blur', () => {
+    setTimeout(saveChanges, 100);
+  });
+  
+  // Save on Enter key
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      input.blur();
+    } else if (e.key === 'Escape') {
+      cell.innerHTML = originalContent;
+    }
+  });
+}
+
+// Inline dropdown editing functionality
+function makeEditableDropdown(cell) {
+  const jobId = cell.dataset.jobId;
+  const field = cell.dataset.field;
+  const type = cell.dataset.type;
+  const job = JOBS.find(j => j.id === jobId);
+  if (!job) return;
+  
+  const currentValue = job[field] || '';
+  
+  // Save original content
+  const originalContent = cell.innerHTML;
+  
+  // Get options based on type
+  let options = [];
+  let allowNew = false;
+  
+  switch(type) {
+    case 'factory':
+      options = Array.from(FACTORIES).sort();
+      allowNew = true;
+      break;
+    case 'factoryManager':
+      options = Array.from(FACTORY_MANAGERS).sort();
+      allowNew = true;
+      break;
+    case 'maintenanceManager':
+      options = Array.from(MAINTENANCE_MANAGERS).sort();
+      allowNew = true;
+      break;
+    case 'department':
+      options = Array.from(DEPARTMENTS).sort();
+      allowNew = true;
+      break;
+    case 'priority':
+      options = ['נמוכה', 'בינונית', 'גבוהה', 'דחופה'];
+      allowNew = false;
+      break;
+  }
+  
+  // Create select element
+  const select = document.createElement('select');
+  select.style.width = '100%';
+  select.style.padding = '0.25rem';
+  select.style.border = '2px solid var(--pico-primary)';
+  select.style.borderRadius = '0.25rem';
+  select.style.background = 'var(--pico-background)';
+  select.style.color = 'var(--pico-color)';
+  select.style.fontSize = '0.875rem';
+  
+  // Add empty option
+  const emptyOption = document.createElement('option');
+  emptyOption.value = '';
+  emptyOption.textContent = 'בחר...';
+  select.appendChild(emptyOption);
+  
+  // Add options
+  options.forEach(opt => {
+    const option = document.createElement('option');
+    option.value = opt;
+    option.textContent = opt;
+    if (opt === currentValue) {
+      option.selected = true;
+    }
+    select.appendChild(option);
+  });
+  
+  // Add "Add new" option if allowed
+  if (allowNew) {
+    const addNewOption = document.createElement('option');
+    addNewOption.value = '__add_new__';
+    addNewOption.textContent = '➕ הוסף חדש';
+    select.appendChild(addNewOption);
+  }
+  
+  // Replace cell content with select
+  cell.innerHTML = '';
+  cell.appendChild(select);
+  select.focus();
+  
+  // Function to save changes
+  const saveChanges = () => {
+    const newValue = select.value;
+    
+    if (newValue === '__add_new__') {
+      // Prompt for new value
+      let promptText = '';
+      switch(type) {
+        case 'factory': promptText = 'הזן שם מפעל חדש:'; break;
+        case 'factoryManager': promptText = 'הזן שם מפקח עבודה חדש:'; break;
+        case 'maintenanceManager': promptText = 'הזן שם מנהל עבודה חדש:'; break;
+        case 'department': promptText = 'הזן שם מחלקה חדשה:'; break;
+      }
+      
+      const newItem = prompt(promptText);
+      if (newItem && newItem.trim()) {
+        // Add to appropriate set
+        switch(type) {
+          case 'factory': FACTORIES.add(newItem.trim()); break;
+          case 'factoryManager': FACTORY_MANAGERS.add(newItem.trim()); break;
+          case 'maintenanceManager': MAINTENANCE_MANAGERS.add(newItem.trim()); break;
+          case 'department': DEPARTMENTS.add(newItem.trim()); break;
+        }
+        
+        // Update job
+        const jobIndex = JOBS.findIndex(j => j.id === jobId);
+        if (jobIndex >= 0) {
+          JOBS[jobIndex][field] = newItem.trim();
+          refreshAll();
+        }
+      } else {
+        // Restore original content
+        cell.innerHTML = originalContent;
+      }
+    } else if (newValue !== currentValue) {
+      // Update job
+      const jobIndex = JOBS.findIndex(j => j.id === jobId);
+      if (jobIndex >= 0) {
+        JOBS[jobIndex][field] = newValue;
+        refreshAll();
+      }
+    } else {
+      // Restore original content if no changes
+      cell.innerHTML = originalContent;
+    }
+  };
+  
+  // Save on change
+  select.addEventListener('change', () => {
+    saveChanges();
+  });
+  
+  // Save on blur (clicking away)
+  select.addEventListener('blur', () => {
+    setTimeout(() => {
+      if (select.value !== '__add_new__') {
+        saveChanges();
+      }
+    }, 100);
+  });
+  
+  // Handle Escape key
+  select.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      cell.innerHTML = originalContent;
+    }
+  });
+}
+
 function initEventListeners(){
   // Open modal to create job
   $('#btnOpenJobModal').addEventListener('click', () => {
@@ -1280,6 +1852,34 @@ function initEventListeners(){
   });
 
   $('#tbody').addEventListener('click', (e)=>{
+    // Check if clicked on editable date cell
+    const dateCell = e.target.closest('.editable-date');
+    if (dateCell && !dateCell.querySelector('input')) {
+      makeEditableDate(dateCell);
+      return;
+    }
+    
+    // Check if clicked on editable worker cell
+    const workerCell = e.target.closest('.editable-worker');
+    if (workerCell && !workerCell.querySelector('input') && !workerCell.querySelector('.inline-worker-editor')) {
+      makeEditableWorker(workerCell);
+      return;
+    }
+    
+    // Check if clicked on editable text cell
+    const textCell = e.target.closest('.editable-text');
+    if (textCell && !textCell.querySelector('input')) {
+      makeEditableText(textCell);
+      return;
+    }
+    
+    // Check if clicked on editable dropdown cell
+    const dropdownCell = e.target.closest('.editable-dropdown');
+    if (dropdownCell && !dropdownCell.querySelector('select')) {
+      makeEditableDropdown(dropdownCell);
+      return;
+    }
+    
     const btn = e.target.closest('button'); if(!btn) return;
     const id = btn.getAttribute('data-id');
     const act = btn.getAttribute('data-act');

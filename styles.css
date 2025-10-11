@@ -448,6 +448,88 @@ tbody td {
   font-size: 0.875rem;
 }
 
+/* Editable date cells */
+.editable-date {
+  cursor: pointer;
+  transition: background-color 0.2s, box-shadow 0.2s;
+}
+
+.editable-date:hover {
+  background-color: var(--pico-card-sectioning-background-color);
+  box-shadow: inset 0 0 0 1px var(--pico-primary);
+}
+
+.editable-date input[type="datetime-local"] {
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+/* Editable cells common styles */
+.editable-text,
+.editable-dropdown,
+.editable-worker {
+  cursor: pointer;
+  transition: background-color 0.2s, box-shadow 0.2s;
+}
+
+.editable-text:hover,
+.editable-dropdown:hover,
+.editable-worker:hover {
+  background-color: var(--pico-card-sectioning-background-color);
+  box-shadow: inset 0 0 0 1px var(--pico-primary);
+}
+
+.editable-text input[type="text"],
+.editable-dropdown select {
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.inline-worker-editor {
+  position: relative;
+  width: 100%;
+}
+
+.inline-worker-display {
+  user-select: none;
+}
+
+.inline-worker-tag {
+  white-space: nowrap;
+}
+
+.inline-worker-remove:hover {
+  opacity: 1 !important;
+}
+
+.inline-worker-dropdown {
+  scrollbar-width: thin;
+  scrollbar-color: var(--pico-muted-border-color) var(--pico-card-background-color);
+}
+
+.inline-worker-dropdown::-webkit-scrollbar {
+  width: 8px;
+}
+
+.inline-worker-dropdown::-webkit-scrollbar-track {
+  background: var(--pico-card-background-color);
+}
+
+.inline-worker-dropdown::-webkit-scrollbar-thumb {
+  background: var(--pico-muted-border-color);
+  border-radius: 4px;
+}
+
+.inline-worker-dropdown::-webkit-scrollbar-thumb:hover {
+  background: var(--pico-primary);
+}
+
+.inline-worker-option input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
 /* Row states */
 .row-bad { 
   outline: 2px solid #dc3545; 
