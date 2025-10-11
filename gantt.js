@@ -293,13 +293,15 @@ function renderGanttTasks() {
   
   jobs.forEach((job, index) => {
     const taskName = job.title || 'ללא כותרת';
-    const worker = job.worker || '';
+    const workers = Array.isArray(job.workers) ? job.workers : (job.worker ? [job.worker] : []);
+    const workersDisplay = workers.length > 0 ? workers.join(', ') : '';
     const factory = job.factory || '';
     
     // Task name panel
     taskNamesHTML += `
       <div class="gantt-task-row" style="height: ${GANTT_CONFIG.taskHeight}px;">
         <div class="gantt-task-name">${escapeHtml(taskName)}</div>
+        <div class="gantt-task-details" style="font-size: 0.8em; opacity: 0.7;">${escapeHtml(workersDisplay)}</div>
       </div>
     `;
     
@@ -493,6 +495,9 @@ function createGanttTaskBar(job, index) {
   // Get color based on job properties
   const color = getGanttTaskColor(job);
   
+  const workers = Array.isArray(job.workers) ? job.workers : (job.worker ? [job.worker] : []);
+  const workersDisplay = workers.length > 0 ? workers.join(', ') : '';
+  
   return `
     <div class="gantt-task-row" style="height: ${GANTT_CONFIG.taskHeight}px;">
       <div 
@@ -504,9 +509,9 @@ function createGanttTaskBar(job, index) {
           border-color: ${color};
           top: 5px;
         "
-        title="${escapeHtml(job.title || '')} (${fmt(job.start)} - ${fmt(job.end)})"
+        title="${escapeHtml(job.title || '')} - ${escapeHtml(workersDisplay)} (${fmt(job.start)} - ${fmt(job.end)})"
         data-job-id="${job.id}"
-        data-worker="${job.worker || ''}"
+        data-workers="${escapeHtml(workersDisplay)}"
       >
         <div class="gantt-resize-handle gantt-resize-left" data-edge="start"></div>
         <span class="gantt-task-label">${escapeHtml(job.title || '')}</span>

@@ -267,11 +267,21 @@
             </select>
           </div>
           <div style="flex:1">
-            <label>עובד מבצע</label>
-            <select id="f-worker">
-              <option value="">בחר עובד מבצע...</option>
-              <option value="__add_new__">➕ הוסף עובד מבצע חדש</option>
-            </select>
+            <label>עובד מבצע (ניתן לבחור מספר)</label>
+            <div id="f-worker-container" class="multi-select-container">
+              <div class="multi-select-selected" id="f-worker-selected" tabindex="0">
+                <span class="placeholder">בחר עובדים מבצעים...</span>
+              </div>
+              <div class="multi-select-dropdown" id="f-worker-dropdown" style="display: none;">
+                <div class="multi-select-options" id="f-worker-options">
+                  <!-- Options will be populated by JavaScript -->
+                </div>
+                <div class="multi-select-action">
+                  <button type="button" class="btn-add-worker" id="btn-add-worker">➕ הוסף עובד חדש</button>
+                </div>
+              </div>
+            </div>
+            <input type="hidden" id="f-worker" />
           </div>
         </div>
         <div class="row">

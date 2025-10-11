@@ -1354,3 +1354,126 @@ td[data-column="title"] {
   }
 }
 
+/* Multi-Select Checkbox Component */
+.multi-select-container {
+  position: relative;
+  width: 100%;
+}
+
+.multi-select-selected {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-background);
+  cursor: pointer;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  transition: border-color 0.2s;
+}
+
+.multi-select-selected:hover {
+  border-color: var(--pico-primary);
+}
+
+.multi-select-selected:focus {
+  outline: none;
+  border-color: var(--pico-primary);
+  box-shadow: 0 0 0 0.2rem rgba(var(--pico-primary-rgb), 0.25);
+}
+
+.multi-select-selected .placeholder {
+  color: var(--pico-muted-color);
+  font-style: italic;
+}
+
+.multi-select-selected .worker-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--pico-primary-background);
+  color: var(--pico-primary-inverse);
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.multi-select-selected .worker-tag .remove {
+  cursor: pointer;
+  font-weight: bold;
+  opacity: 0.8;
+  padding: 0 0.25rem;
+}
+
+.multi-select-selected .worker-tag .remove:hover {
+  opacity: 1;
+}
+
+.multi-select-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 0.25rem;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.multi-select-options {
+  padding: 0.5rem;
+}
+
+.multi-select-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.multi-select-option:hover {
+  background: var(--pico-card-sectioning-background-color);
+}
+
+.multi-select-option input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.multi-select-option label {
+  cursor: pointer;
+  margin: 0;
+  flex: 1;
+}
+
+.multi-select-action {
+  padding: 0.5rem;
+  border-top: 1px solid var(--pico-muted-border-color);
+}
+
+.btn-add-worker {
+  width: 100%;
+  padding: 0.5rem;
+  background: transparent;
+  border: 1px dashed var(--pico-muted-border-color);
+  color: var(--pico-primary);
+  cursor: pointer;
+  border-radius: 0.25rem;
+  transition: all 0.2s;
+  font-size: 0.875rem;
+}
+
+.btn-add-worker:hover {
+  background: var(--pico-card-sectioning-background-color);
+  border-color: var(--pico-primary);
+}
+
