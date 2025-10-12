@@ -337,7 +337,7 @@ function createTaskBar(job, index) {
           background-color: ${color};
           top: 2px;
         "
-        title="${escapeHtml(job.title || '')} (${fmt(job.start)} - ${fmt(job.end)})"
+        data-job-id="${job.id}"
       >
         <span class="timeline-task-label">${escapeHtml(job.title || '')}</span>
       </div>

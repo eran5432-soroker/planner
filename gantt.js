@@ -165,7 +165,48 @@ function renderGantt() {
   // Setup scroll synchronization after rendering
   setTimeout(() => {
     setupScrollSync();
-  }, 100);
+    
+    // Scroll to the leftmost visual position (beginning of timeline in LTR terms)
+    const headerPanel = document.querySelector('.gantt-right-panel');
+    const gridContainer = document.querySelector('.gantt-grid-container');
+    if (headerPanel && gridContainer) {
+      // RTL scroll behavior varies by browser:
+      // Chrome/Safari: negative values or 0 is rightmost, need to scroll to negative max or positive max
+      // Firefox: 0 is rightmost, positive values go left
+      
+      // First, try to detect the scroll behavior
+      const maxScrollWidth = gridContainer.scrollWidth - gridContainer.clientWidth;
+      
+      // Set to a test value to detect behavior
+      gridContainer.scrollLeft = 1;
+      const testValue = gridContainer.scrollLeft;
+      
+      let targetScroll;
+      if (testValue > 0) {
+        // Type 1: Positive values (Firefox-style) - max value is leftmost
+        targetScroll = maxScrollWidth;
+      } else {
+        // Type 2: Negative or zero (Chrome-style) - try negative max
+        targetScroll = -maxScrollWidth;
+      }
+      
+      console.log('RTL Scroll Debug:', {
+        scrollWidth: gridContainer.scrollWidth,
+        clientWidth: gridContainer.clientWidth,
+        maxScrollWidth,
+        testValue,
+        targetScroll
+      });
+      
+      headerPanel.scrollLeft = targetScroll;
+      gridContainer.scrollLeft = targetScroll;
+      
+      // Verify and log actual position
+      setTimeout(() => {
+        console.log('Final scrollLeft:', gridContainer.scrollLeft);
+      }, 50);
+    }
+  }, 150);
 }
 
 // Get unique days that have jobs (with caching for performance)
@@ -296,7 +337,6 @@ function renderGanttTasks() {
     taskNamesHTML += `
       <div class="gantt-task-row" style="height: ${GANTT_CONFIG.taskHeight}px;">
         <div class="gantt-task-name">${escapeHtml(taskName)}</div>
-        <div class="gantt-task-details" style="font-size: 0.8em; opacity: 0.7;">${escapeHtml(workersDisplay)}</div>
       </div>
     `;
     
@@ -472,11 +512,6 @@ function renderGanttTasks() {
     gridRect = null;
   });
   
-  // Auto-scroll to first task with delay to ensure rendering is complete
-  setTimeout(() => {
-    autoScrollToFirstTask();
-  }, 500);
-  
   // Show/hide empty state
   const emptyGantt = document.getElementById('emptyGantt');
   if (emptyGantt) {
@@ -556,7 +591,6 @@ function createGanttTaskBar(job, index) {
           border-color: ${color};
           top: 5px;
         "
-        title="${escapeHtml(job.title || '')} - ${escapeHtml(workersDisplay)} (${fmt(job.start)} - ${fmt(job.end)})"
         data-job-id="${job.id}"
         data-workers="${escapeHtml(workersDisplay)}"
       >

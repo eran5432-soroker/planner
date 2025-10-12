@@ -717,7 +717,7 @@ function renderTimeline(){
       
       const depInfo = j.dependsOn ? JOBS.find(dj=>dj.id===j.dependsOn) : null;
       const depText = depInfo ? ` → ${depInfo.title||'תל'}` : '';
-      div.title = `${j.title||''} | ${fmt(j.start)} → ${fmt(j.end)} | ${j.factory}${depText}`;
+      // No title attribute - using custom hover panel instead
       
       // Add resize handles and label
       div.innerHTML = `
@@ -2207,6 +2207,9 @@ function initEventListeners(){
   $('#btnAddFactory')?.addEventListener('click', () => addTeamMember('factory'));
   $('#btnAddDepartment')?.addEventListener('click', () => addTeamMember('department'));
   
+  // Initialize hover info panel
+  initHoverInfoPanel();
+  
   // Team management button - toggle between table and team view
   $('#btnTeamManagement')?.addEventListener('click', () => {
     const teamView = $('#view-team');
@@ -2814,6 +2817,109 @@ function getDataSet(type) {
     case 'factory': return FACTORIES;
     case 'department': return DEPARTMENTS;
     default: return new Set();
+  }
+}
+
+// Hover Info Panel Functions
+function initHoverInfoPanel() {
+  const panel = $('#hoverInfoPanel');
+  if (!panel) return;
+  
+  let currentJobId = null;
+  
+  // Track mouse movement to position panel
+  document.addEventListener('mousemove', (e) => {
+    // Check if hovering over timeline task (in main timeline view)
+    const timelineTask = e.target.closest('.jobbar');
+    if (timelineTask) {
+      const jobId = timelineTask.dataset.jobId;
+      if (jobId !== currentJobId) {
+        currentJobId = jobId;
+        showHoverInfo(jobId, e);
+      } else {
+        updateHoverInfoPosition(e);
+      }
+      return;
+    }
+    
+    // Check if hovering over gantt task
+    const ganttTask = e.target.closest('.gantt-task-bar');
+    if (ganttTask) {
+      const jobId = ganttTask.dataset.jobId;
+      if (jobId !== currentJobId) {
+        currentJobId = jobId;
+        showHoverInfo(jobId, e);
+      } else {
+        updateHoverInfoPosition(e);
+      }
+      return;
+    }
+    
+    // If not hovering over any task, hide panel
+    if (currentJobId !== null) {
+      currentJobId = null;
+      hideHoverInfo();
+    }
+  });
+}
+
+function showHoverInfo(jobId, event) {
+  const panel = $('#hoverInfoPanel');
+  if (!panel) return;
+  
+  const job = JOBS.find(j => j.id === jobId);
+  if (!job) return;
+  
+  // Update panel content
+  $('#hoverInfoTitle').textContent = job.title || 'ללא כותרת';
+  
+  const workers = Array.isArray(job.workers) ? job.workers : [];
+  $('#hoverInfoWorkers').textContent = workers.length > 0 ? workers.join(', ') : '-';
+  
+  $('#hoverInfoFactory').textContent = job.factory || '-';
+  $('#hoverInfoStart').textContent = fmt(job.start) || '-';
+  $('#hoverInfoEnd').textContent = fmt(job.end) || '-';
+  $('#hoverInfoDuration').textContent = durationStr(job.start, job.end) || '-';
+  
+  // Position panel near cursor
+  updateHoverInfoPosition(event);
+  
+  // Show panel
+  panel.classList.add('visible');
+}
+
+function updateHoverInfoPosition(event) {
+  const panel = $('#hoverInfoPanel');
+  if (!panel || !panel.classList.contains('visible')) return;
+  
+  const offset = 15; // Offset from cursor
+  const panelWidth = 280;
+  const panelHeight = panel.offsetHeight;
+  
+  let left = event.clientX + offset;
+  let top = event.clientY + offset;
+  
+  // Adjust if panel goes off screen
+  if (left + panelWidth > window.innerWidth) {
+    left = event.clientX - panelWidth - offset;
+  }
+  
+  if (top + panelHeight > window.innerHeight) {
+    top = event.clientY - panelHeight - offset;
+  }
+  
+  // Keep within bounds
+  left = Math.max(10, Math.min(left, window.innerWidth - panelWidth - 10));
+  top = Math.max(10, Math.min(top, window.innerHeight - panelHeight - 10));
+  
+  panel.style.left = left + 'px';
+  panel.style.top = top + 'px';
+}
+
+function hideHoverInfo() {
+  const panel = $('#hoverInfoPanel');
+  if (panel) {
+    panel.classList.remove('visible');
   }
 }
 

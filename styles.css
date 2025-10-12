@@ -1677,6 +1677,64 @@ td[data-column="title"] {
 }
 
 /* ===========================
+   HOVER INFO PANEL
+   =========================== */
+
+.hover-info-panel {
+  position: fixed;
+  width: 280px;
+  background: var(--pico-card-background-color);
+  border: 2px solid var(--pico-primary);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s ease;
+}
+
+.hover-info-panel.visible {
+  opacity: 1;
+}
+
+.hover-info-header {
+  background: var(--pico-primary);
+  color: var(--pico-primary-inverse);
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+  border-radius: 0.375rem 0.375rem 0 0;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.hover-info-content {
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.hover-info-row {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  line-height: 1.3;
+}
+
+.hover-info-label {
+  font-weight: 600;
+  color: var(--pico-primary);
+  min-width: 55px;
+  flex-shrink: 0;
+}
+
+.hover-info-value {
+  color: var(--pico-color);
+  word-break: break-word;
+  flex: 1;
+}
+
+/* ===========================
    OPTIONS MENU (SIDE PANEL)
    =========================== */
 
