@@ -2020,6 +2020,7 @@ function initEventListeners(){
     $('#view-table').style.display = name==='table'? 'block':'none';
     $('#view-timeline').style.display = name==='timeline'? 'block':'none';
     $('#view-gantt').style.display = name==='gantt'? 'block':'none';
+    $('#view-team').style.display = name==='team'? 'block':'none';
     if(name==='timeline') renderTimeline();
     if(name==='gantt') {
       // Initialize Gantt if not already done
@@ -2027,6 +2028,7 @@ function initEventListeners(){
         initGantt();
       }
     }
+    if(name==='team') renderTeamManagement();
   }));
 
   // Timeline date default = today
@@ -2195,6 +2197,40 @@ function initEventListeners(){
         e.preventDefault();
         $('#btnNextDay').click();
       }
+    }
+  });
+  
+  // Team management event listeners
+  $('#btnAddWorker')?.addEventListener('click', () => addTeamMember('worker'));
+  $('#btnAddFactoryManager')?.addEventListener('click', () => addTeamMember('factoryManager'));
+  $('#btnAddMaintenanceManager')?.addEventListener('click', () => addTeamMember('maintenanceManager'));
+  $('#btnAddFactory')?.addEventListener('click', () => addTeamMember('factory'));
+  $('#btnAddDepartment')?.addEventListener('click', () => addTeamMember('department'));
+  
+  // Team management button - toggle between table and team view
+  $('#btnTeamManagement')?.addEventListener('click', () => {
+    const teamView = $('#view-team');
+    const isTeamViewActive = teamView && teamView.style.display === 'block';
+    
+    if (isTeamViewActive) {
+      // Go back to table view
+      $$('.tab').forEach(t => t.classList.remove('active'));
+      $$('.tab[data-tab="table"]').forEach(t => t.classList.add('active'));
+      $('#view-table').style.display = 'block';
+      $('#view-timeline').style.display = 'none';
+      $('#view-gantt').style.display = 'none';
+      $('#view-team').style.display = 'none';
+      $('#btnTeamManagement').textContent = '👥 ניהול צוות';
+      renderTable();
+    } else {
+      // Show team management view
+      $$('.tab').forEach(t => t.classList.remove('active'));
+      $('#view-table').style.display = 'none';
+      $('#view-timeline').style.display = 'none';
+      $('#view-gantt').style.display = 'none';
+      $('#view-team').style.display = 'block';
+      $('#btnTeamManagement').textContent = '🏭 חזרה למשימות';
+      renderTeamManagement();
     }
   });
 }
@@ -2612,4 +2648,173 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   initEventListeners();
   refreshAll();
 });
+
+// Team Management Functions
+function renderTeamManagement() {
+  renderTeamList('workersList', WORKERS, 'worker', 'עובד');
+  renderTeamList('factoryManagersList', FACTORY_MANAGERS, 'factoryManager', 'מפקח');
+  renderTeamList('maintenanceManagersList', MAINTENANCE_MANAGERS, 'maintenanceManager', 'מנהל');
+  renderTeamList('factoriesList', FACTORIES, 'factory', 'מפעל');
+  renderTeamList('departmentsList', DEPARTMENTS, 'department', 'מחלקה');
+}
+
+function renderTeamList(containerId, dataSet, type, label) {
+  const container = $(`#${containerId}`);
+  if (!container) return;
+  
+  if (dataSet.size === 0) {
+    container.innerHTML = `<div class="team-empty">אין ${label}ים להצגה</div>`;
+    return;
+  }
+  
+  const items = Array.from(dataSet).sort();
+  container.innerHTML = items.map(name => {
+    const count = countJobsForTeamMember(type, name);
+    return `
+      <div class="team-item" data-type="${type}" data-name="${escapeHtml(name)}">
+        <span class="team-item-name" onclick="editTeamMember('${type}', '${escapeHtml(name).replace(/'/g, "\\'")}')">${escapeHtml(name)}<span class="team-item-count">${count}</span></span>
+        <div class="team-item-actions">
+          <button class="team-item-delete btn-icon" onclick="deleteTeamMember('${type}', '${escapeHtml(name).replace(/'/g, "\\'")}')">✕</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function countJobsForTeamMember(type, name) {
+  if (type === 'worker') {
+    return JOBS.filter(j => {
+      const workers = Array.isArray(j.workers) ? j.workers : [];
+      return workers.includes(name);
+    }).length;
+  } else if (type === 'factory') {
+    return JOBS.filter(j => j.factory === name).length;
+  } else if (type === 'factoryManager') {
+    return JOBS.filter(j => j.factoryManager === name).length;
+  } else if (type === 'maintenanceManager') {
+    return JOBS.filter(j => j.maintenanceManager === name).length;
+  } else if (type === 'department') {
+    return JOBS.filter(j => j.department === name).length;
+  }
+  return 0;
+}
+
+function addTeamMember(type) {
+  const labels = {
+    worker: 'עובד מבצע',
+    factoryManager: 'מפקח עבודה',
+    maintenanceManager: 'מנהל עבודה',
+    factory: 'מפעל',
+    department: 'מחלקה'
+  };
+  
+  const name = prompt(`הזן שם ${labels[type]} חדש:`);
+  if (!name || !name.trim()) return;
+  
+  const trimmedName = name.trim();
+  const dataSet = getDataSet(type);
+  
+  if (dataSet.has(trimmedName)) {
+    alert(`${labels[type]} "${trimmedName}" כבר קיים`);
+    return;
+  }
+  
+  saveToUndoHistory('add-team-member');
+  dataSet.add(trimmedName);
+  refreshAll();
+  renderTeamManagement();
+}
+
+function editTeamMember(type, oldName) {
+  const labels = {
+    worker: 'עובד מבצע',
+    factoryManager: 'מפקח עבודה',
+    maintenanceManager: 'מנהל עבודה',
+    factory: 'מפעל',
+    department: 'מחלקה'
+  };
+  
+  const newName = prompt(`ערוך ${labels[type]}:`, oldName);
+  if (!newName || !newName.trim() || newName.trim() === oldName) return;
+  
+  const trimmedName = newName.trim();
+  const dataSet = getDataSet(type);
+  
+  if (dataSet.has(trimmedName)) {
+    alert(`${labels[type]} "${trimmedName}" כבר קיים`);
+    return;
+  }
+  
+  saveToUndoHistory('edit-team-member');
+  
+  // Update in set
+  dataSet.delete(oldName);
+  dataSet.add(trimmedName);
+  
+  // Update in all jobs
+  JOBS.forEach(job => {
+    if (type === 'worker') {
+      if (Array.isArray(job.workers)) {
+        const index = job.workers.indexOf(oldName);
+        if (index !== -1) {
+          job.workers[index] = trimmedName;
+        }
+      }
+    } else if (job[type] === oldName) {
+      job[type] = trimmedName;
+    }
+  });
+  
+  refreshAll();
+  renderTeamManagement();
+}
+
+function deleteTeamMember(type, name) {
+  const labels = {
+    worker: 'עובד מבצע',
+    factoryManager: 'מפקח עבודה',
+    maintenanceManager: 'מנהל עבודה',
+    factory: 'מפעל',
+    department: 'מחלקה'
+  };
+  
+  const count = countJobsForTeamMember(type, name);
+  const confirmMsg = count > 0 
+    ? `האם למחוק את ${labels[type]} "${name}"?\nהוא/היא משוייך/ת ל-${count} משימות. המשימות יישארו אבל בלי ${labels[type]} זה.`
+    : `האם למחוק את ${labels[type]} "${name}"?`;
+  
+  if (!confirm(confirmMsg)) return;
+  
+  saveToUndoHistory('delete-team-member');
+  
+  // Remove from set
+  const dataSet = getDataSet(type);
+  dataSet.delete(name);
+  
+  // Remove from all jobs
+  JOBS.forEach(job => {
+    if (type === 'worker') {
+      if (Array.isArray(job.workers)) {
+        job.workers = job.workers.filter(w => w !== name);
+      }
+    } else if (job[type] === name) {
+      job[type] = '';
+    }
+  });
+  
+  refreshAll();
+  renderTeamManagement();
+}
+
+function getDataSet(type) {
+  switch(type) {
+    case 'worker': return WORKERS;
+    case 'factoryManager': return FACTORY_MANAGERS;
+    case 'maintenanceManager': return MAINTENANCE_MANAGERS;
+    case 'factory': return FACTORIES;
+    case 'department': return DEPARTMENTS;
+    default: return new Set();
+  }
+}
+
 

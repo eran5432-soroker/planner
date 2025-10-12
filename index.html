@@ -24,16 +24,19 @@
         <h1>מתזמן משימות למפעל</h1>
         <div class="sub"> מעקב אחר תלויות. ירוק = הושלם | אדום = קונפליקט | כתום = בעיות תלות | צהוב = שבת.</div>
       </div>
-      <div class="theme-toggle">
-        <button id="themeToggle" class="btn" title="החלף מצב תצוגה">
-          <span id="themeIcon">🌙</span>
-        </button>
+      <div style="display: flex; gap: 0.75rem; align-items: center;">
+        <button id="btnTeamManagement" class="btn" title="ניהול צוות">👥 ניהול צוות</button>
+        <div class="theme-toggle">
+          <button id="themeToggle" class="btn" title="החלף מצב תצוגה">
+            <span id="themeIcon">🌙</span>
+          </button>
+        </div>
       </div>
     </div>
   </header>
 
   <!-- Filter Panel (Top, Collapsible) -->
-  <div class="filter-top-panel" id="filterTopPanel">
+  <div class="filter-top-panel collapsed" id="filterTopPanel">
     <div class="filter-top-header">
       <h2>🔍 סינון וכלים</h2>
       <button class="btn-collapse-top" id="btnToggleTopFilters" title="החלף סינון">▼</button>
@@ -239,6 +242,58 @@
           </div>
         </div>
         <div id="emptyGantt" class="empty" style="display:none">אין משימות לתצוגת גאנט.</div>
+      </div>
+
+      <!-- TEAM MANAGEMENT VIEW -->
+      <div id="view-team" style="display:none; margin-top:12px;">
+        <div class="team-management">
+          <h3>ניהול צוות ומשאבים</h3>
+          
+          <!-- Workers Section -->
+          <section class="team-section">
+            <div class="team-section-header">
+              <h4>עובדים מבצעים</h4>
+              <button id="btnAddWorker" class="btn primary">+ הוסף עובד</button>
+            </div>
+            <div id="workersList" class="team-list"></div>
+          </section>
+
+          <!-- Factory Managers Section -->
+          <section class="team-section">
+            <div class="team-section-header">
+              <h4>מפקחי עבודה</h4>
+              <button id="btnAddFactoryManager" class="btn primary">+ הוסף מפקח</button>
+            </div>
+            <div id="factoryManagersList" class="team-list"></div>
+          </section>
+
+          <!-- Maintenance Managers Section -->
+          <section class="team-section">
+            <div class="team-section-header">
+              <h4>מנהלי עבודה</h4>
+              <button id="btnAddMaintenanceManager" class="btn primary">+ הוסף מנהל</button>
+            </div>
+            <div id="maintenanceManagersList" class="team-list"></div>
+          </section>
+
+          <!-- Factories Section -->
+          <section class="team-section">
+            <div class="team-section-header">
+              <h4>מפעלים</h4>
+              <button id="btnAddFactory" class="btn primary">+ הוסף מפעל</button>
+            </div>
+            <div id="factoriesList" class="team-list"></div>
+          </section>
+
+          <!-- Departments Section -->
+          <section class="team-section">
+            <div class="team-section-header">
+              <h4>מחלקות</h4>
+              <button id="btnAddDepartment" class="btn primary">+ הוסף מחלקה</button>
+            </div>
+            <div id="departmentsList" class="team-list"></div>
+          </section>
+        </div>
       </div>
     </section>
   </div>
