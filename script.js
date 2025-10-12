@@ -51,7 +51,7 @@ function toLocal(dt){ return dayjs.tz(dt, TZ); }
 
 function fmt(dt){ 
   if(!dt) return '';
-  const date = toLocal(dt);
+  const date = dayjs(dt);
   return date.isValid() ? date.format('YYYY-MM-DD HH:mm') : '';
 }
 
@@ -2237,6 +2237,15 @@ async function handleFile(evt){
   const colDependsOn = ask('תלוי ב', headers.find(h=>/depend|תלוי|dependency|prerequisite|קודם/i.test(h))||'');
   const colNotes = ask('הערות', headers.find(h=>/note|remark|remarks|הערה|comment|comments|הערות|תיאור|description|desc|details|פרטים/i.test(h))||'');
 
+  // Clear existing data BEFORE importing new data
+  JOBS = [];
+  FACTORIES.clear();
+  WORKERS.clear();
+  FACTORY_MANAGERS.clear();
+  MAINTENANCE_MANAGERS.clear();
+  DEPARTMENTS.clear();
+  nextId = 1;
+
   // Import all mapped fields
   const imported = json.map(row=>{
     const factory = String(row[colFactory]||'').trim();
@@ -2284,14 +2293,6 @@ async function handleFile(evt){
       finished: false
     };
   });
-  // Clear existing data before importing new data
-  JOBS = [];
-  FACTORIES.clear();
-  WORKERS.clear();
-  FACTORY_MANAGERS.clear();
-  MAINTENANCE_MANAGERS.clear();
-  DEPARTMENTS.clear();
-  nextId = 1;
   
   // Import new data
   JOBS = imported;
