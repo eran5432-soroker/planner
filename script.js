@@ -2341,126 +2341,15 @@ async function handleFile(evt){
 }
 
 function exportExcel(){
-  if(typeof XLSX === 'undefined') {
-    alert('ספריית ייצוא Excel לא נטענה. אנא רענן את הדף ונסה שוב.');
-    return;
+  // Use ExcelExportService to export with multiple sheets
+  if (typeof ExcelExportService !== 'undefined') {
+    ExcelExportService.exportToExcel(JOBS, fmt, durationStr);
+  } else {
+    alert('שירות ייצוא Excel לא נטען. אנא רענן את הדף ונסה שוב.');
   }
-  
-  const rows = JOBS.map(j=>{
-    const depInfo = j.dependsOn ? JOBS.find(dj=>dj.id===j.dependsOn) : null;
-    const workers = Array.isArray(j.workers) ? j.workers : (j.worker ? [j.worker] : []);
-    const workersStr = workers.join(', ');
-    return {
-      'משימה': j.title, 
-      'מפעל': j.factory, 
-      'עובד מבצע': workersStr,
-      'מפקח עבודה': j.factoryManager,
-      'מנהל עבודה': j.maintenanceManager,
-      'עדיפות': j.priority,
-      'מספר ציוד': j.equipmentNumber,
-      'קריאת שירות': j.serviceCall,
-      'מחלקה מבצעת': j.department,
-      'התחלה': fmt(j.start), 
-      'סיום': fmt(j.end), 
-      'משך': durationStr(j.start, j.end),
-      'תלוי ב': depInfo ? depInfo.title : '',
-      'הערות': j.notes
-    };
-  });
-  
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'משימות');
-  XLSX.writeFile(wb, 'factory-jobs.xlsx');
 }
 
-// Initialize empty data
-function seed(){
-  // Add some sample data for testing
-  const now = dayjs();
-  JOBS = [
-    {
-      id: '1',
-      title: 'תחזוקת קו A',
-      factory: 'מפעל צפון',
-      workers: ['יוסי כהן'],
-      factoryManager: 'דוד לוי',
-      maintenanceManager: 'שרה גולד',
-      priority: 'גבוהה',
-      equipmentNumber: 'EQ-001',
-      serviceCall: 'SC-2024-001',
-      department: 'אחזקה',
-      start: now.hour(8).minute(0).format(),
-      end: now.hour(12).minute(0).format(),
-      dependsOn: '',
-      notes: 'תחזוקה תקופתית',
-      finished: false
-    },
-    {
-      id: '2',
-      title: 'החלפת חלק בקו B',
-      factory: 'מפעל דרום',
-      workers: ['מיכל אברהם', 'יוסי כהן'],
-      factoryManager: 'רונן שטרן',
-      maintenanceManager: 'שרה גולד',
-      priority: 'דחופה',
-      equipmentNumber: 'EQ-002',
-      serviceCall: 'SC-2024-002',
-      department: 'אחזקה',
-      start: now.hour(10).minute(0).format(),
-      end: now.hour(14).minute(0).format(),
-      dependsOn: '1',
-      notes: 'החלפת מנוע - דורש שני עובדים',
-      finished: false
-    },
-    {
-      id: '3',
-      title: 'בדיקת בטיחות',
-      factory: 'מפעל צפון',
-      workers: ['יוסי כהן'],
-      factoryManager: 'דוד לוי',
-      maintenanceManager: 'שרה גולד',
-      priority: 'בינונית',
-      equipmentNumber: 'EQ-003',
-      serviceCall: 'SC-2024-003',
-      department: 'בטיחות',
-      start: now.add(1, 'day').hour(9).minute(0).format(),
-      end: now.add(1, 'day').hour(11).minute(0).format(),
-      dependsOn: '',
-      notes: 'בדיקה חודשית',
-      finished: true
-    },
-    {
-      id: '4',
-      title: 'תחזוקת קו C',
-      factory: 'מפעל דרום',
-      workers: ['מיכל אברהם', 'דני לוי'],
-      factoryManager: 'רונן שטרן',
-      maintenanceManager: 'שרה גולד',
-      priority: 'נמוכה',
-      equipmentNumber: 'EQ-004',
-      serviceCall: 'SC-2024-004',
-      department: 'אחזקה',
-      start: now.add(2, 'day').hour(14).minute(0).format(),
-      end: now.add(2, 'day').hour(18).minute(0).format(),
-      dependsOn: '',
-      notes: 'תחזוקה שבועית - דורש צוות',
-      finished: false
-    }
-  ];
-  
-  // Update sets
-  JOBS.forEach(job => {
-    if (job.factory) FACTORIES.add(job.factory);
-    const workers = Array.isArray(job.workers) ? job.workers : (job.worker ? [job.worker] : []);
-    workers.forEach(w => { if(w) WORKERS.add(w); });
-    if (job.factoryManager) FACTORY_MANAGERS.add(job.factoryManager);
-    if (job.maintenanceManager) MAINTENANCE_MANAGERS.add(job.maintenanceManager);
-    if (job.department) DEPARTMENTS.add(job.department);
-  });
-  
-  nextId = 5;
-}
+// No seed data - start with empty data or load from db.xlsx/localStorage
 
 function loadFromLocalStorage(){
   const raw = localStorage.getItem('jobs.v1');
@@ -2534,6 +2423,7 @@ async function autoLoadDatabase() {
   try {
     const response = await fetch('db.xlsx');
     if (!response.ok) {
+      console.log('Couldnt get db.xlsx ');
       return false;
     }
     
@@ -2639,13 +2529,11 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   // Load column visibility settings
   loadColumnVisibility();
   
-  // Try to load from db.xlsx first, then localStorage, then seed with demo data
+  // Try to load from db.xlsx first, then localStorage
   const dbLoaded = await autoLoadDatabase();
   if (!dbLoaded) {
-    const localStorageLoaded = loadFromLocalStorage();
-    if (!localStorageLoaded) {
-      seed();
-    }
+    loadFromLocalStorage();
+    // If localStorage is also empty, start with empty data
   }
   
   initEventListeners();
