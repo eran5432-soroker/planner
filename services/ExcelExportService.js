@@ -62,7 +62,7 @@ const ExcelExportService = {
   },
 
   /**
-   * Generate Timeline sheet (hourly time-grid)
+   * Generate Timeline sheet (hourly time-grid) - organized by worker
    */
   generateTimelineSheet(jobs) {
     // Get jobs with valid dates
@@ -84,7 +84,7 @@ const ExcelExportService = {
     const hoursByDate = this.groupHoursByDate(hours);
 
     // Build date header row (row 1)
-    const dateHeaderRow = ['משימה', 'מפעל', 'עובדים'];
+    const dateHeaderRow = ['עובד', 'מפעל', 'מנהל עבודה'];
     hoursByDate.forEach(dateGroup => {
       dateHeaderRow.push(dateGroup.date);
       // Add empty cells for remaining hours of this date
@@ -101,67 +101,169 @@ const ExcelExportService = {
       });
     });
 
-    // Build data rows
+    // Build data rows - organized by worker
     const dataRows = [dateHeaderRow, hourHeaderRow];
     const jobMerges = []; // Track merge ranges for jobs
     
-    validJobs.forEach((job, jobIndex) => {
-      const workers = Array.isArray(job.workers) ? job.workers : (job.worker ? [job.worker] : []);
-      const workersStr = workers.join(', ');
-      
+    // Group jobs by worker
+    const workerJobsMap = this.groupJobsByWorker(validJobs);
+    
+    let rowIndex = 0;
+    workerJobsMap.forEach((workerData, workerName) => {
       const row = [
-        job.title || '',
-        job.factory || '',
-        workersStr
+        workerName || 'ללא עובד',
+        workerData.factories.join(', '),
+        workerData.managers.join(', ')
       ];
       
-      // Track active cell ranges for merging
-      let mergeStart = -1;
-      
+      // For each hour, find which job (if any) this worker is working on
       hours.forEach((hour, hourIndex) => {
-        const isActive = this.isTaskActiveInHour(job, hour);
+        let activeJob = null;
         
-        if (isActive) {
-          if (mergeStart === -1) {
-            // Start of a new active range
-            mergeStart = hourIndex;
+        // Find if any of this worker's jobs are active in this hour
+        for (const job of workerData.jobs) {
+          if (this.isTaskActiveInHour(job, hour)) {
+            activeJob = job;
+            break;
           }
+        }
+        
+        if (activeJob) {
           row.push('✓');
         } else {
-          if (mergeStart !== -1) {
-            // End of active range, record merge
-            jobMerges.push({
-              row: jobIndex + 2, // +2 for header rows
-              startCol: mergeStart + 3, // +3 for first 3 columns
-              endCol: hourIndex + 3 - 1,
-              jobTitle: job.title || ''
-            });
-            mergeStart = -1;
-          }
           row.push('');
         }
       });
       
+      // Track job merges for this worker
+      // Group consecutive hours with the same job or conflict
+      let currentJob = null;
+      let mergeStart = -1;
+      let currentConflict = false;
+      
+      hours.forEach((hour, hourIndex) => {
+        // Find ALL active jobs in this hour (to detect conflicts)
+        const activeJobs = workerData.jobs.filter(job => this.isTaskActiveInHour(job, hour));
+        
+        if (activeJobs.length > 0) {
+          const isConflict = activeJobs.length > 1;
+          const jobKey = isConflict 
+            ? 'CONFLICT:' + activeJobs.map(j => j.id).sort().join(',')
+            : activeJobs[0].id;
+          
+          if (currentJob === jobKey) {
+            // Same job/conflict continues
+            // mergeStart already set
+          } else {
+            // Different job/conflict or start of new one
+            if (currentJob !== null && mergeStart !== -1) {
+              // End previous merge
+              jobMerges.push({
+                row: rowIndex + 2, // +2 for header rows
+                startCol: mergeStart + 3, // +3 for first 3 columns
+                endCol: hourIndex + 3 - 1,
+                jobTitle: currentConflict 
+                  ? 'קונפליקט: ' + activeJobs.map(j => j.title || 'ללא כותרת').join(' | ')
+                  : (activeJobs[0].title || ''),
+                isConflict: currentConflict
+              });
+            }
+            // Start new merge
+            currentJob = jobKey;
+            currentConflict = isConflict;
+            mergeStart = hourIndex;
+          }
+        } else {
+          // No active job
+          if (currentJob !== null && mergeStart !== -1) {
+            // End previous merge
+            const jobsForMerge = workerData.jobs.filter(job => 
+              this.isTaskActiveInHour(job, hours[mergeStart])
+            );
+            jobMerges.push({
+              row: rowIndex + 2,
+              startCol: mergeStart + 3,
+              endCol: hourIndex + 3 - 1,
+              jobTitle: currentConflict 
+                ? 'קונפליקט: ' + jobsForMerge.map(j => j.title || 'ללא כותרת').join(' | ')
+                : (jobsForMerge[0]?.title || ''),
+              isConflict: currentConflict
+            });
+          }
+          currentJob = null;
+          currentConflict = false;
+          mergeStart = -1;
+        }
+      });
+      
       // Handle case where job is active until the end
-      if (mergeStart !== -1) {
+      if (currentJob !== null && mergeStart !== -1) {
+        const jobsForMerge = workerData.jobs.filter(job => 
+          this.isTaskActiveInHour(job, hours[mergeStart])
+        );
         jobMerges.push({
-          row: jobIndex + 2,
+          row: rowIndex + 2,
           startCol: mergeStart + 3,
           endCol: hours.length + 3 - 1,
-          jobTitle: job.title || ''
+          jobTitle: currentConflict 
+            ? 'קונפליקט: ' + jobsForMerge.map(j => j.title || 'ללא כותרת').join(' | ')
+            : (jobsForMerge[0]?.title || ''),
+          isConflict: currentConflict
         });
       }
       
       dataRows.push(row);
+      rowIndex++;
     });
 
     // Create worksheet
     const ws = XLSX.utils.aoa_to_sheet(dataRows);
 
     // Apply styling and merging
-    this.styleTimelineSheet(ws, hoursByDate, validJobs.length + 2, jobMerges);
+    this.styleTimelineSheet(ws, hoursByDate, workerJobsMap.size + 2, jobMerges);
 
     return ws;
+  },
+
+  /**
+   * Group jobs by worker
+   * Returns a Map where key is worker name and value is { jobs: [], factories: [], managers: [] }
+   */
+  groupJobsByWorker(jobs) {
+    const workerMap = new Map();
+    
+    jobs.forEach(job => {
+      const workers = Array.isArray(job.workers) ? job.workers : (job.worker ? [job.worker] : ['ללא עובד']);
+      
+      workers.forEach(worker => {
+        if (!workerMap.has(worker)) {
+          workerMap.set(worker, {
+            jobs: [],
+            factories: new Set(),
+            managers: new Set()
+          });
+        }
+        
+        const workerData = workerMap.get(worker);
+        workerData.jobs.push(job);
+        
+        if (job.factory) {
+          workerData.factories.add(job.factory);
+        }
+        
+        if (job.maintenanceManager) {
+          workerData.managers.add(job.maintenanceManager);
+        }
+      });
+    });
+    
+    // Convert Sets to Arrays
+    workerMap.forEach((data, worker) => {
+      data.factories = Array.from(data.factories);
+      data.managers = Array.from(data.managers);
+    });
+    
+    return workerMap;
   },
 
   /**
@@ -421,7 +523,7 @@ const ExcelExportService = {
     if (!ws['!merges']) ws['!merges'] = [];
 
     // Merge cells in date header row
-    let colIndex = 3; // Start after first 3 columns (משימה, מפעל, עובדים)
+    let colIndex = 3; // Start after first 3 columns (עובד, מפעל, מנהל עבודה)
     hoursByDate.forEach(dateGroup => {
       if (dateGroup.hours.length > 1) {
         // Merge cells for this date
@@ -487,6 +589,7 @@ const ExcelExportService = {
 
     // Style data cells (apply colors for active cells)
     const activeFill = { patternType: 'solid', fgColor: { rgb: '70AD47' } }; // Green
+    const conflictFill = { patternType: 'solid', fgColor: { rgb: 'FF6B6B' } }; // Red for conflicts
     const inactiveFill = { patternType: 'solid', fgColor: { rgb: 'FFFFFF' } }; // White
     const activeFont = { bold: true, color: { rgb: 'FFFFFF' } }; // White bold text for job names
     
@@ -516,8 +619,10 @@ const ExcelExportService = {
     }
     
     // Second pass: Color cells that are part of jobs (from jobMerges)
-    // MUST ensure all cells in merge range exist and are styled
+    // Apply green or red background to all cells
     jobMerges.forEach(merge => {
+      const fillColor = merge.isConflict ? conflictFill : activeFill;
+      
       for (let c = merge.startCol; c <= merge.endCol; c++) {
         const cellRef = XLSX.utils.encode_cell({ r: merge.row, c: c });
         
@@ -526,9 +631,9 @@ const ExcelExportService = {
           ws[cellRef] = { v: '', t: 's' };
         }
         
-        // Apply full green styling with borders
+        // Apply fill with thin default borders (green for normal, red for conflict)
         ws[cellRef].s = {
-          fill: activeFill,
+          fill: fillColor,
           font: {},
           alignment: { horizontal: 'center', vertical: 'center' },
           border: this.getBorder()
@@ -536,34 +641,41 @@ const ExcelExportService = {
       }
     });
 
-    // Third pass: Add job titles and merge cells (after styling is applied)
+    // Third pass: Merge cells and apply thick borders around the entire job
     jobMerges.forEach(merge => {
-      // Set job title in the first cell (always, even for single cells)
-      const cellRef = XLSX.utils.encode_cell({ r: merge.row, c: merge.startCol });
-      ws[cellRef].v = merge.jobTitle;
-      
-      // Apply full styling to job title cell (recreate style to avoid reference issues)
-      ws[cellRef].s = {
-        fill: activeFill,
-        font: activeFont,
-        alignment: { horizontal: 'center', vertical: 'center' },
-        border: this.getBorder()
-      };
-      
+      // Merge cells if needed
       if (merge.startCol < merge.endCol) {
-        // Only merge if there's more than one cell
         ws['!merges'].push({
           s: { r: merge.row, c: merge.startCol },
           e: { r: merge.row, c: merge.endCol }
         });
       }
+      
+      // Set job title in the first cell and apply styling with thick outer border
+      const cellRef = XLSX.utils.encode_cell({ r: merge.row, c: merge.startCol });
+      ws[cellRef].v = merge.jobTitle;
+      
+      // Apply styling with thick black border around entire merged area
+      // Use red fill for conflicts, green for normal jobs
+      const fillColor = merge.isConflict ? conflictFill : activeFill;
+      ws[cellRef].s = {
+        fill: fillColor,
+        font: activeFont,
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: {
+          top: { style: 'medium', color: { rgb: '000000' } },
+          bottom: { style: 'medium', color: { rgb: '000000' } },
+          left: { style: 'medium', color: { rgb: '000000' } },
+          right: { style: 'medium', color: { rgb: '000000' } }
+        }
+      };
     });
 
     // Set column widths
     ws['!cols'] = [];
-    ws['!cols'][0] = { wch: 30 }; // משימה
+    ws['!cols'][0] = { wch: 25 }; // עובד
     ws['!cols'][1] = { wch: 20 }; // מפעל
-    ws['!cols'][2] = { wch: 20 }; // עובדים
+    ws['!cols'][2] = { wch: 25 }; // מנהל עבודה
     for (let c = 3; c <= range.e.c; c++) {
       ws['!cols'][c] = { wch: 6 }; // Hours
     }
@@ -650,6 +762,7 @@ const ExcelExportService = {
 
     // Style data cells (apply colors for active cells)
     const activeFill = { patternType: 'solid', fgColor: { rgb: '70AD47' } }; // Green
+    const conflictFill = { patternType: 'solid', fgColor: { rgb: 'FF6B6B' } }; // Red for conflicts
     const inactiveFill = { patternType: 'solid', fgColor: { rgb: 'FFFFFF' } }; // White
     const activeFont = { bold: true, color: { rgb: 'FFFFFF' } }; // White bold text for job names
     
@@ -679,7 +792,7 @@ const ExcelExportService = {
     }
     
     // Second pass: Color cells that are part of jobs (from jobMerges)
-    // MUST ensure all cells in merge range exist and are styled
+    // Apply green background to all cells
     jobMerges.forEach(merge => {
       for (let c = merge.startCol; c <= merge.endCol; c++) {
         const cellRef = XLSX.utils.encode_cell({ r: merge.row, c: c });
@@ -689,7 +802,7 @@ const ExcelExportService = {
           ws[cellRef] = { v: '', t: 's' };
         }
         
-        // Apply full green styling with borders
+        // Apply green fill with thin default borders
         ws[cellRef].s = {
           fill: activeFill,
           font: {},
@@ -699,27 +812,32 @@ const ExcelExportService = {
       }
     });
 
-    // Third pass: Add job titles and merge cells (after styling is applied)
+    // Third pass: Merge cells and apply thick borders around the entire job
     jobMerges.forEach(merge => {
-      // Set job title in the first cell (always, even for single cells)
-      const cellRef = XLSX.utils.encode_cell({ r: merge.row, c: merge.startCol });
-      ws[cellRef].v = merge.jobTitle;
-      
-      // Apply full styling to job title cell (recreate style to avoid reference issues)
-      ws[cellRef].s = {
-        fill: activeFill,
-        font: activeFont,
-        alignment: { horizontal: 'center', vertical: 'center' },
-        border: this.getBorder()
-      };
-      
+      // Merge cells if needed
       if (merge.startCol < merge.endCol) {
-        // Only merge if there's more than one cell
         ws['!merges'].push({
           s: { r: merge.row, c: merge.startCol },
           e: { r: merge.row, c: merge.endCol }
         });
       }
+      
+      // Set job title in the first cell and apply styling with thick outer border
+      const cellRef = XLSX.utils.encode_cell({ r: merge.row, c: merge.startCol });
+      ws[cellRef].v = merge.jobTitle;
+      
+      // Apply styling with thick black border around entire merged area
+      ws[cellRef].s = {
+        fill: activeFill,
+        font: activeFont,
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: {
+          top: { style: 'medium', color: { rgb: '000000' } },
+          bottom: { style: 'medium', color: { rgb: '000000' } },
+          left: { style: 'medium', color: { rgb: '000000' } },
+          right: { style: 'medium', color: { rgb: '000000' } }
+        }
+      };
     });
 
     // Set column widths

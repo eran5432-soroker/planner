@@ -221,10 +221,11 @@
       <!-- TIMELINE VIEW -->
       <div id="view-timeline" style="display:none; margin-top:12px;">
         <div class="timeline-head">
-          <label>תאריך</label>
-          <button id="btnPrevDay" class="btn-icon" title="יום קודם" style="margin: 0 0.5rem; font-size: 1.2rem;">→</button>
-          <input id="tl-date" type="date" />
-          <button id="btnNextDay" class="btn-icon" title="יום הבא" style="margin: 0 0.5rem; font-size: 1.2rem;">←</button>
+          <label>מתאריך:</label>
+          <input id="tl-start-date" type="date" />
+          <label>עד תאריך:</label>
+          <input id="tl-end-date" type="date" />
+          <button id="btnApplyTimelineRange" class="btn primary" style="margin: 0 0.5rem;">החל</button>
           <button id="btnToday" class="btn" style="margin: 0 0.5rem;">היום</button>
           <span class="muted">כל נתיב הוא עובד מבצע • סולם 24 שעות • ירוק = הושלם • אדום = קונפליקט • כתום = בעיות תלות • צהוב = שבת • 🖱️ גרור ושחרר לשינוי זמן</span>
         </div>

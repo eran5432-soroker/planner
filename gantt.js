@@ -115,6 +115,37 @@ function setupScrollSync() {
   }
 }
 
+// Get the earliest and latest job dates for Gantt
+function getGanttJobDateRange() {
+  const jobs = JOBS.filter(j => j.start && j.end);
+  
+  if (jobs.length === 0) {
+    return null;
+  }
+  
+  let earliest = null;
+  let latest = null;
+  
+  jobs.forEach(job => {
+    const start = dayjs(job.start);
+    const end = dayjs(job.end);
+    
+    if (start.isValid()) {
+      if (!earliest || start.isBefore(earliest)) {
+        earliest = start;
+      }
+    }
+    
+    if (end.isValid()) {
+      if (!latest || end.isAfter(latest)) {
+        latest = end;
+      }
+    }
+  });
+  
+  return { earliest, latest };
+}
+
 // Update Gantt date range
 function updateGanttDateRange() {
   const startDateInput = document.getElementById('gantt-start-date');
@@ -123,13 +154,25 @@ function updateGanttDateRange() {
   if (startDateInput?.value) {
     ganttState.startDate = dayjs(startDateInput.value).startOf('day');
   } else {
-    ganttState.startDate = dayjs().startOf('day');
+    // Auto-detect date range from jobs
+    const dateRange = getGanttJobDateRange();
+    if (dateRange && dateRange.earliest) {
+      ganttState.startDate = dateRange.earliest.startOf('day');
+    } else {
+      ganttState.startDate = dayjs().startOf('day');
+    }
   }
   
   if (endDateInput?.value) {
     ganttState.endDate = dayjs(endDateInput.value).endOf('day');
   } else {
-    ganttState.endDate = ganttState.startDate.clone().add(7, 'days').endOf('day');
+    // Auto-detect end date from jobs, or use 7 days after start
+    const dateRange = getGanttJobDateRange();
+    if (dateRange && dateRange.latest) {
+      ganttState.endDate = dateRange.latest.endOf('day');
+    } else {
+      ganttState.endDate = ganttState.startDate.clone().add(7, 'days').endOf('day');
+    }
   }
   
   // Set default values if not set
@@ -165,47 +208,6 @@ function renderGantt() {
   // Setup scroll synchronization after rendering
   setTimeout(() => {
     setupScrollSync();
-    
-    // Scroll to the leftmost visual position (beginning of timeline in LTR terms)
-    const headerPanel = document.querySelector('.gantt-right-panel');
-    const gridContainer = document.querySelector('.gantt-grid-container');
-    if (headerPanel && gridContainer) {
-      // RTL scroll behavior varies by browser:
-      // Chrome/Safari: negative values or 0 is rightmost, need to scroll to negative max or positive max
-      // Firefox: 0 is rightmost, positive values go left
-      
-      // First, try to detect the scroll behavior
-      const maxScrollWidth = gridContainer.scrollWidth - gridContainer.clientWidth;
-      
-      // Set to a test value to detect behavior
-      gridContainer.scrollLeft = 1;
-      const testValue = gridContainer.scrollLeft;
-      
-      let targetScroll;
-      if (testValue > 0) {
-        // Type 1: Positive values (Firefox-style) - max value is leftmost
-        targetScroll = maxScrollWidth;
-      } else {
-        // Type 2: Negative or zero (Chrome-style) - try negative max
-        targetScroll = -maxScrollWidth;
-      }
-      
-      console.log('RTL Scroll Debug:', {
-        scrollWidth: gridContainer.scrollWidth,
-        clientWidth: gridContainer.clientWidth,
-        maxScrollWidth,
-        testValue,
-        targetScroll
-      });
-      
-      headerPanel.scrollLeft = targetScroll;
-      gridContainer.scrollLeft = targetScroll;
-      
-      // Verify and log actual position
-      setTimeout(() => {
-        console.log('Final scrollLeft:', gridContainer.scrollLeft);
-      }, 50);
-    }
   }, 150);
 }
 
@@ -287,15 +289,15 @@ function renderGanttHeader() {
     const dayName = dayDate.format('ddd DD/MM');
     const dayWidth = 24 * GANTT_CONFIG.hourWidth;
     
-    // Add day header
-    days.push(`<div class="gantt-day-header" style="width: ${dayWidth}px; left: ${cumulativePosition}px; position: absolute;">${dayName}</div>`);
+    // Add day header (RTL positioning)
+    days.push(`<div class="gantt-day-header" style="width: ${dayWidth}px; right: ${cumulativePosition}px; position: absolute;">${dayName}</div>`);
     
-    // Add hours for this day
+    // Add hours for this day (RTL positioning)
     const dayHours = [];
     for (let h = 0; h < 24; h++) {
       const hourWidth = GANTT_CONFIG.hourWidth;
       const hourPosition = cumulativePosition + (h * GANTT_CONFIG.hourWidth);
-      dayHours.push(`<div class="gantt-hour-header" style="width: ${hourWidth}px; left: ${hourPosition}px; position: absolute; z-index: 10;">${h}</div>`);
+      dayHours.push(`<div class="gantt-hour-header" style="width: ${hourWidth}px; right: ${hourPosition}px; position: absolute; z-index: 10;">${h}</div>`);
     }
     headerHTML += dayHours.join('');
     
@@ -383,9 +385,9 @@ function renderGanttTasks() {
       }
       e.dataTransfer.setData('text/plain', bar.dataset.jobId);
       bar.classList.add('dragging');
-      // Store initial mouse position relative to the bar
+      // Store initial mouse position relative to the bar (RTL: from right edge)
       const rect = bar.getBoundingClientRect();
-      e.dataTransfer.setData('text/offset', e.clientX - rect.left);
+      e.dataTransfer.setData('text/offset', rect.right - e.clientX);
     });
     
     // Drag end
@@ -393,16 +395,16 @@ function renderGanttTasks() {
       bar.classList.remove('dragging');
     });
     
-    // Add resize handlers
+    // Add resize handlers (RTL: right=start, left=end)
     const leftHandle = bar.querySelector('.gantt-resize-left');
     const rightHandle = bar.querySelector('.gantt-resize-right');
     
     if (leftHandle) {
-      leftHandle.addEventListener('mousedown', (e) => startResize(e, bar, 'start'));
+      leftHandle.addEventListener('mousedown', (e) => startResize(e, bar, 'end'));
     }
     
     if (rightHandle) {
-      rightHandle.addEventListener('mousedown', (e) => startResize(e, bar, 'end'));
+      rightHandle.addEventListener('mousedown', (e) => startResize(e, bar, 'start'));
     }
   });
   
@@ -426,7 +428,8 @@ function renderGanttTasks() {
     }
     
     const offset = parseInt(e.dataTransfer.getData('text/offset')) || 0;
-    const dropPosition = e.clientX - gridRect.left - offset;
+    // RTL: calculate from right edge
+    const dropPosition = gridRect.right - e.clientX - offset;
     
     // Show drop position indicator
     let indicator = document.getElementById('gantt-drop-indicator');
@@ -444,7 +447,7 @@ function renderGanttTasks() {
       `;
       grid.appendChild(indicator);
     }
-    indicator.style.left = dropPosition + 'px';
+    indicator.style.right = dropPosition + 'px';
   });
   
   // Handle drop
@@ -454,7 +457,8 @@ function renderGanttTasks() {
     
     const jobId = e.dataTransfer.getData('text/plain');
     const offset = parseInt(e.dataTransfer.getData('text/offset')) || 0;
-    const dropPosition = e.clientX - grid.getBoundingClientRect().left - offset;
+    // RTL: calculate from right edge
+    const dropPosition = grid.getBoundingClientRect().right - e.clientX - offset;
     const hourWidth = GANTT_CONFIG.hourWidth;
     const hours = Math.round(dropPosition / hourWidth);
     
@@ -585,7 +589,7 @@ function createGanttTaskBar(job, index) {
       <div 
         class="${cssClasses}" 
         style="
-          left: ${position}px; 
+          right: ${position}px; 
           width: ${width}px; 
           background-color: ${color};
           border-color: ${color};
@@ -652,7 +656,7 @@ function getGanttTaskColor(job) {
   const isFinished = job.finished;
   const isShabbat = jobTouchesShabbat(job);
   
-  // Priority colors (same as table view)
+  // Priority colors - only show special colors for issues/status
   if (isConflict) {
     return '#dc3545'; // Red for conflicts
   }
@@ -669,33 +673,8 @@ function getGanttTaskColor(job) {
     return '#ffc107'; // Yellow for Shabbat tasks
   }
   
-  // Default color based on priority (keep existing logic)
-  const priorityColors = {
-    'נמוכה': '#45b7d1',
-    'בינונית': '#4ecdc4', 
-    'גבוהה': '#ff6b6b',
-    'דחופה': '#ff9f43'
-  };
-  
-  if (job.priority && priorityColors[job.priority]) {
-    return priorityColors[job.priority];
-  }
-  
-  // Default color based on factory (keep existing logic)
-  const factoryColors = [
-    '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57',
-    '#ff9ff3', '#54a0ff', '#5f27cd', '#00d2d3', '#ff9f43'
-  ];
-  
-  if (job.factory) {
-    const hash = job.factory.split('').reduce((a, b) => {
-      a = ((a << 5) - a) + b.charCodeAt(0);
-      return a & a;
-    }, 0);
-    return factoryColors[Math.abs(hash) % factoryColors.length];
-  }
-  
-  return '#95a5a6'; // Default gray
+  // Default color for all normal tasks (no conflicts)
+  return '#6295e8'; // Blue for normal tasks
 }
 
 // Get Gantt width
@@ -726,7 +705,7 @@ function addVerticalGridLines(grid) {
       line.className = 'gantt-vertical-line';
       line.style.cssText = `
         position: absolute;
-        left: ${position}px;
+        right: ${position}px;
         top: 0;
         bottom: 0;
         width: 1px;
@@ -740,46 +719,6 @@ function addVerticalGridLines(grid) {
   });
 }
 
-// Auto-scroll to first task
-let hasAutoScrolled = false;
-
-function autoScrollToFirstTask() {
-  if (hasAutoScrolled) {
-    return;
-  }
-  
-  const jobs = getGanttJobs();
-  
-  if (jobs.length === 0) {
-    return;
-  }
-  
-  // Find the earliest task
-  const earliestTask = jobs
-    .filter(job => job.start && job.end)
-    .sort((a, b) => dayjs(a.start).valueOf() - dayjs(b.start).valueOf())[0];
-  
-  if (earliestTask) {
-    const startTime = dayjs(earliestTask.start);
-    const position = calculateGanttTaskPosition(startTime);
-    
-    // Scroll both header and grid to the first task
-    const headerPanel = document.querySelector('.gantt-right-panel');
-    const gridContainer = document.querySelector('.gantt-grid-container');
-    
-    if (headerPanel && gridContainer) {
-      // If task is at the very beginning, scroll to start
-      let scrollPosition = 0;
-      if (position > 0) {
-        scrollPosition = Math.max(0, position - 100);
-      }
-      
-      headerPanel.scrollLeft = scrollPosition;
-      gridContainer.scrollLeft = scrollPosition;
-      hasAutoScrolled = true;
-    }
-  }
-}
 
 // Update Gantt when data changes
 function updateGantt() {
@@ -830,8 +769,8 @@ function handleResize(e) {
   const job = JOBS.find(j => j.id === resizeState.jobId);
   if (!job) return;
   
-  // Calculate pixel difference
-  const dx = e.clientX - resizeState.startX;
+  // Calculate pixel difference (inverted for RTL)
+  const dx = resizeState.startX - e.clientX;
   const hourWidth = GANTT_CONFIG.hourWidth;
   const hoursDiff = Math.round(dx / hourWidth);
   
@@ -869,7 +808,7 @@ function updateTaskBarPosition(job) {
   const position = calculateGanttTaskPosition(startTime);
   const width = calculateGanttTaskWidth(startTime, endTime);
   
-  bar.style.left = position + 'px';
+  bar.style.right = position + 'px';
   bar.style.width = width + 'px';
 }
 

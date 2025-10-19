@@ -1,8 +1,9 @@
 /* Custom overrides and additions to Pico.css - Hebrew RTL Version */
 
 :root {
-  --pico-spacing: 1rem;
-  --pico-border-radius: 0.5rem;
+  --pico-spacing: 0.85rem;
+  --pico-border-radius: 0.425rem;
+  font-size: 13.6px; /* 85% of default 16px */
 }
 
 /* Light mode variables */
@@ -46,7 +47,7 @@ html, body {
 
 /* Header */
 header { 
-  padding: 1.5rem 2rem; 
+  padding: 1.25rem 1.7rem; 
   border-bottom: 1px solid var(--pico-muted-border-color);
   background: var(--pico-card-background-color);
   margin-bottom: 0;
@@ -67,13 +68,13 @@ header .sub {
 
 /* Layout */
 .wrap { 
-  padding: 1.5rem 2rem; 
+  padding: 1.25rem 1.7rem; 
   max-width: 100%;
   margin: 0 auto;
 }
 
 @media (max-width: 1100px){ 
-  .wrap { padding: 1rem; } 
+  .wrap { padding: 0.85rem; } 
 }
 
 /* Cards */
@@ -81,7 +82,7 @@ header .sub {
   background: var(--pico-card-background-color); 
   border: 1px solid var(--pico-muted-border-color); 
   border-radius: var(--pico-border-radius); 
-  padding: 1.5rem; 
+  padding: 1.25rem; 
 }
 
 .card h2 { 
@@ -96,7 +97,7 @@ header .sub {
   background: var(--pico-card-background-color);
   border: 1px solid var(--pico-muted-border-color);
   border-radius: var(--pico-border-radius);
-  margin: 1.5rem 2rem;
+  margin: 1.25rem 1.7rem;
   overflow: hidden;
 }
 
@@ -104,7 +105,7 @@ header .sub {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem 1.5rem;
+  padding: 0.85rem 1.25rem;
   background: var(--pico-card-sectioning-background-color);
   cursor: pointer;
   user-select: none;
@@ -136,9 +137,9 @@ header .sub {
 }
 
 .filter-top-content {
-  padding: 1.5rem;
+  padding: 1.25rem;
   display: grid;
-  gap: 1rem;
+  gap: 0.85rem;
   max-height: 500px;
   opacity: 1;
   transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
@@ -148,13 +149,13 @@ header .sub {
 .filter-top-panel.collapsed .filter-top-content {
   max-height: 0;
   opacity: 0;
-  padding: 0 1.5rem;
+  padding: 0 1.25rem;
 }
 
 .filter-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.85rem;
 }
 
 .filter-col label {
@@ -606,6 +607,7 @@ tbody td {
 .timeline-scroll-top-wrapper {
   width: 100%;
   overflow: hidden;
+  direction: rtl;
 }
 
 .timeline-scroll-top {
@@ -643,19 +645,254 @@ tbody td {
   border: 1px solid var(--pico-muted-border-color); 
   border-radius: 0 0 0.5rem 0.5rem; 
   overflow-x: auto; 
-  overflow-y: hidden; 
+  overflow-y: auto;
+  direction: rtl;
+  max-height: calc(100vh - 300px);
 }
 
-.timeline::-webkit-scrollbar { height: 10px; }
-.timeline::-webkit-scrollbar-track { background: var(--pico-card-sectioning-background-color); border-radius: 0 0 0.5rem 0.5rem; }
-.timeline::-webkit-scrollbar-thumb { background: var(--pico-muted-border-color); border-radius: 0.25rem; }
-.timeline::-webkit-scrollbar-thumb:hover { background: var(--pico-primary); }
+.timeline::-webkit-scrollbar { 
+  height: 10px;
+  width: 10px;
+}
+.timeline::-webkit-scrollbar-track { 
+  background: var(--pico-card-sectioning-background-color); 
+  border-radius: 0 0 0.5rem 0.5rem; 
+}
+.timeline::-webkit-scrollbar-thumb { 
+  background: var(--pico-muted-border-color); 
+  border-radius: 0.25rem; 
+}
+.timeline::-webkit-scrollbar-thumb:hover { 
+  background: var(--pico-primary); 
+}
+
+/* Timeline header rows */
+.timeline-days-row {
+  display: block;
+  height: 30px;
+  border-bottom: 1px solid var(--pico-muted-border-color);
+  min-width: max-content;
+  position: relative;
+}
+
+.timeline-day-header {
+  padding: 0.5rem;
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--pico-color);
+  border-left: 1px solid var(--pico-muted-border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: var(--pico-card-sectioning-background-color);
+}
+
+.timeline-hours-row {
+  display: block;
+  height: 30px;
+  min-width: max-content;
+  position: relative;
+  overflow: visible;
+  border-top: 1px solid var(--pico-muted-border-color);
+}
+
+.timeline-hour-header {
+  padding: 0.25rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--pico-color);
+  border-left: 1px solid var(--pico-muted-border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: var(--pico-card-background-color);
+  font-weight: 500;
+  min-width: 20px;
+}
+
+/* Timeline Tab Structure */
+.timeline-container {
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: var(--pico-card-background-color);
+}
+
+.timeline-controls {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background: var(--pico-card-sectioning-background-color);
+  border-radius: 0.375rem;
+  border-bottom: 1px solid var(--pico-muted-border-color);
+  flex-wrap: wrap;
+}
+
+.timeline-zoom-controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.timeline-zoom-controls button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  font-weight: bold;
+}
+
+.timeline-header {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  border-bottom: 2px solid var(--pico-muted-border-color);
+  background: var(--pico-card-sectioning-background-color);
+}
+
+.timeline-left-panel {
+  border-left: 1px solid var(--pico-muted-border-color);
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--pico-color);
+}
+
+.timeline-task-header {
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  height: 60px;
+}
+
+.timeline-right-panel {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: calc(100vw - 350px);
+}
+
+.timeline-right-panel::-webkit-scrollbar {
+  height: 12px;
+}
+
+.timeline-right-panel::-webkit-scrollbar-track {
+  background: var(--pico-card-sectioning-background-color);
+  border-radius: 6px;
+}
+
+.timeline-right-panel::-webkit-scrollbar-thumb {
+  background: var(--pico-muted-border-color);
+  border-radius: 6px;
+}
+
+.timeline-right-panel::-webkit-scrollbar-thumb:hover {
+  background: var(--pico-primary);
+}
+
+.timeline-time-header {
+  min-width: 100%;
+  height: 60px;
+  position: relative;
+  white-space: nowrap;
+}
+
+.timeline-content {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.timeline-task-names {
+  border-left: 1px solid var(--pico-muted-border-color);
+  background: var(--pico-card-background-color);
+  overflow-y: auto;
+}
+
+.timeline-grid {
+  position: relative;
+  background: repeating-linear-gradient(90deg, 
+    var(--pico-card-background-color), 
+    var(--pico-card-background-color) 40px, 
+    var(--pico-card-sectioning-background-color) 40px, 
+    var(--pico-card-sectioning-background-color) 80px);
+  min-height: 100%;
+  min-width: max-content;
+  width: max-content;
+}
+
+.timeline-task-row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--pico-muted-border-color);
+  position: relative;
+  height: 50px;
+}
+
+.timeline-task-name {
+  padding: 0.5rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: var(--pico-color);
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+}
+
+.timeline-task-bar {
+  position: absolute;
+  top: 5px;
+  height: 40px;
+  border-radius: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  color: white;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: all 0.2s;
+  z-index: 2;
+  user-select: none;
+  border: 1px solid;
+}
+
+.timeline-task-bar:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+  z-index: 3;
+}
+
+.timeline-task-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
 
 /* Lane - RTL Adjustments */
 .lane { 
   display: grid; 
-  grid-template-columns: 140px minmax(2112px, 2112px); 
-  border-bottom: 1px solid var(--pico-muted-border-color); 
+  grid-template-columns: 140px auto; 
+  border-bottom: 1px solid var(--pico-muted-border-color);
+  direction: rtl;
 }
 
 .lane:last-child { border-bottom: none; }
@@ -668,18 +905,18 @@ tbody td {
   font-weight: 500;
   position: sticky; 
   right: 0; 
-  z-index: 10; 
+  z-index: 10;
 }
 
 .lane .grid { 
   position: relative; 
   background: repeating-linear-gradient(90deg, 
     var(--pico-card-background-color), 
-    var(--pico-card-background-color) 44px, 
-    var(--pico-card-sectioning-background-color) 44px, 
-    var(--pico-card-sectioning-background-color) 88px); 
-  height: 44px; 
-  width: 2112px; 
+    var(--pico-card-background-color) 20px, 
+    var(--pico-card-sectioning-background-color) 20px, 
+    var(--pico-card-sectioning-background-color) 40px); 
+  /* height: 44px;  */
+  min-width: 960px; 
   transition: background-color 0.2s; 
 }
 
@@ -771,7 +1008,8 @@ tbody td {
 /* Hour labels */
 .hour-header { 
   background: var(--pico-card-sectioning-background-color); 
-  border-bottom: 2px solid var(--pico-muted-border-color); 
+  border-bottom: 2px solid var(--pico-muted-border-color);
+  direction: rtl;
 }
 
 .hour-header .label { 
@@ -842,9 +1080,9 @@ tbody td {
 :root[data-theme="light"] .timeline .lane .grid {
   background: repeating-linear-gradient(90deg, 
     var(--pico-card-background-color), 
-    var(--pico-card-background-color) 44px, 
-    var(--pico-card-sectioning-background-color) 44px, 
-    var(--pico-card-sectioning-background-color) 88px);
+    var(--pico-card-background-color) 20px, 
+    var(--pico-card-sectioning-background-color) 20px, 
+    var(--pico-card-sectioning-background-color) 40px);
 }
 
 :root[data-theme="light"] .jobbar {
@@ -1052,7 +1290,7 @@ td[data-column="title"] {
 
 /* Table container with scroll */
 .table-container {
-  max-height: calc(100vh - 200px); /* Adjust 200px based on your header/filter height */
+  max-height: calc(100vh - 300px);
   overflow-x: auto;
   overflow-y: auto;
   border: 1px solid var(--pico-muted-border-color);
@@ -1148,6 +1386,7 @@ td[data-column="title"] {
   grid-template-columns: 300px 1fr;
   border-bottom: 2px solid var(--pico-muted-border-color);
   background: var(--pico-card-sectioning-background-color);
+  direction: rtl;
 }
 
 .gantt-left-panel {
@@ -1162,6 +1401,7 @@ td[data-column="title"] {
   overflow-x: auto;
   overflow-y: hidden;
   max-width: calc(100vw - 350px);
+  direction: rtl;
 }
 
 .gantt-right-panel::-webkit-scrollbar {
@@ -1253,8 +1493,9 @@ td[data-column="title"] {
 .gantt-content {
   display: grid;
   grid-template-columns: 300px 1fr;
-  max-height: 500px;
+  max-height: calc(100vh - 300px);
   overflow-y: auto;
+  direction: rtl;
 }
 
 .gantt-task-names {
@@ -1267,6 +1508,7 @@ td[data-column="title"] {
   overflow-x: auto;
   overflow-y: hidden;
   max-width: calc(100vw - 350px);
+  direction: rtl;
 }
 
 .gantt-grid-container::-webkit-scrollbar {

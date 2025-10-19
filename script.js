@@ -490,11 +490,12 @@ let sortState = {
 };
 
 function renderTimeline(){
-  const day = $('#tl-date').value || dayjs().format('YYYY-MM-DD');
-  const startDay = dayjs(day).startOf('day');
-  const endDay = dayjs(day).endOf('day');
+  const startDateValue = $('#tl-start-date').value || dayjs().format('YYYY-MM-DD');
+  const endDateValue = $('#tl-end-date').value || dayjs(startDateValue).add(3, 'days').format('YYYY-MM-DD');
+  const startDay = dayjs(startDateValue).startOf('day');
+  const endDay = dayjs(endDateValue).endOf('day');
   
-  // Get all jobs for the day first
+  // Get all jobs in the date range
   let jobs = JOBS.filter(j=> {
     // Skip jobs with invalid or empty dates
     if(!j.start || !j.end) return false;
@@ -593,50 +594,127 @@ function renderTimeline(){
   const conflicts = recomputeConflicts();
   const depIssues = recomputeDependencyIssues();
 
-  // time ticks (every hour)
-  function xPos(dt){ const mins = dayjs(dt).diff(startDay, 'minute'); return (mins/60)*88; } // 88px per hour (matches grid bg)
+  // Calculate number of days in range
+  const numDays = endDay.diff(startDay, 'day') + 1;
+  const totalHours = numDays * 24;
+  const totalWidth = totalHours * 40; // 40px per hour
   
-  // Convert position to time
+  // time ticks (every hour) - 40px per hour, RTL positioning (right to left)
+  function xPos(dt){ 
+    const mins = dayjs(dt).diff(startDay, 'minute'); 
+    return (mins/60)*40; // For right positioning in RTL, earlier times have smaller right values
+  }
+  
+  // Convert position to time (RTL aware - px is the 'right' value)
   function posToTime(px){ 
-    const hours = px / 88;
+    const hours = px / 40;
     return startDay.add(hours, 'hour');
   }
-
-  // Create hour labels header
+  
+  // Create two-row header: dates + hours
   const headerLane = document.createElement('div'); 
   headerLane.className='lane hour-header';
-  headerLane.innerHTML = `<div class="label">זמן →</div><div class="grid"></div>`;
-  const headerGrid = headerLane.querySelector('.grid');
+  headerLane.style.height = '88px'; // Double height for two rows
+  
+  // Date row with all days
+  const dateRow = document.createElement('div');
+  dateRow.className = 'timeline-date-row';
+  dateRow.style.cssText = `
+    position: relative;
+    height: 44px;
+    display: flex;
+    background: var(--pico-card-sectioning-background-color);
+    border-bottom: 2px solid var(--pico-muted-border-color);
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    width: ${totalWidth}px;
+  `;
+  
+  // Add each day header
+  let currentDay = startDay.clone();
+  for(let d = 0; d < numDays; d++) {
+    const dayLabel = currentDay.format('ddd DD/MM');
+    const dayDiv = document.createElement('div');
+    dayDiv.style.cssText = `
+      width: 960px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--pico-color);
+      border-left: ${d > 0 ? '2px solid var(--pico-muted-border-color)' : 'none'};
+    `;
+    dayDiv.textContent = dayLabel;
+    dateRow.appendChild(dayDiv);
+    currentDay = currentDay.add(1, 'day');
+  }
+  
+  // Hours row
+  const hoursRow = document.createElement('div');
+  hoursRow.className = 'timeline-hours-row';
+  hoursRow.style.cssText = `
+    position: relative;
+    height: 44px;
+    background: var(--pico-card-background-color);
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    width: ${totalWidth}px;
+  `;
+  
   const hourLabels = document.createElement('div'); 
   hourLabels.className='hour-labels';
-  for(let h=0; h<24; h++){
+  hourLabels.style.position = 'relative';
+  hourLabels.style.width = `${totalWidth}px`;
+  hourLabels.style.height = '100%';
+  hourLabels.style.margin = '0';
+  hourLabels.style.padding = '0';
+  
+  // Add hour labels for all days (RTL positioned)
+  for(let h=0; h < totalHours; h++){
     const label = document.createElement('div'); 
     label.className='hour-label'; 
-    label.style.left = `${h*88}px`;
-    label.textContent = `${h}:00`;
+    label.style.right = `${h*40}px`; // RTL positioning
+    label.textContent = `${h % 24}`;
     hourLabels.appendChild(label);
   }
-  headerGrid.appendChild(hourLabels);
+  
+  hoursRow.appendChild(hourLabels);
+  
+  headerLane.innerHTML = `<div class="label" style="height: 88px; display: flex; align-items: center; justify-content: center; margin: 0; padding: 0.75rem;">זמן →</div><div class="grid" style="height: 88px; margin: 0; padding: 0; width: ${totalWidth}px;"></div>`;
+  const headerGrid = headerLane.querySelector('.grid');
+  headerGrid.style.display = 'flex';
+  headerGrid.style.flexDirection = 'column';
+  headerGrid.style.margin = '0';
+  headerGrid.style.padding = '0';
+  headerGrid.style.gap = '0';
+  headerGrid.appendChild(dateRow);
+  headerGrid.appendChild(hoursRow);
+  
   host.appendChild(headerLane);
 
-  // Color palette for overlapping jobs (different shades)
+  // Color palette for normal jobs (solid colors)
   const jobColors = [
-    { bg: 'linear-gradient(180deg,#1d2b4d,#16213a)', border: '#31476f' }, // Original blue
-    { bg: 'linear-gradient(180deg,#2d4d3a,#1e3a28)', border: '#4f7658' }, // Green
-    { bg: 'linear-gradient(180deg,#4d3a1d,#3a2a16)', border: '#76624f' }, // Brown
-    { bg: 'linear-gradient(180deg,#4d1d3a,#3a1628)', border: '#764f6f' }, // Purple
-    { bg: 'linear-gradient(180deg,#1d3a4d,#16283a)', border: '#4f6276' }, // Teal
+    { bg: '#6295e8', border: '#5080d0' }, // Blue
+    { bg: '#6295e8', border: '#5080d0' }, // Blue
+    { bg: '#6295e8', border: '#5080d0' }, // Blue
+    { bg: '#6295e8', border: '#5080d0' }, // Blue
+    { bg: '#6295e8', border: '#5080d0' }, // Blue
   ];
 
   for(const [worker, arr] of Array.from(byWorker.entries()).sort((a,b)=> a[0].localeCompare(b[0]))){
     const lane = document.createElement('div'); lane.className='lane';
-    lane.innerHTML = `<div class="label">${escapeHtml(worker||'(ללא עובד מבצע)')}</div><div class="grid"></div>`;
+    lane.innerHTML = `<div class="label">${escapeHtml(worker||'(ללא עובד מבצע)')}</div><div class="grid" style="width: ${totalWidth}px;"></div>`;
     const grid = lane.querySelector('.grid');
 
-    // ticks 0..24
+    // ticks for each hour across all days (RTL positioned)
     const tickbar = document.createElement('div'); tickbar.className='tickbar';
-    for(let h=0; h<=24; h++){
-      const t = document.createElement('div'); t.className='tick'; t.style.left = `${h*88}px`; tickbar.appendChild(t);
+    for(let h=0; h<=totalHours; h++){
+      const t = document.createElement('div'); t.className='tick'; 
+      t.style.right = `${h*40}px`; // RTL positioning
+      tickbar.appendChild(t);
     }
     grid.appendChild(tickbar);
 
@@ -667,39 +745,39 @@ function renderTimeline(){
       
       if(isFinished) {
         div.classList.add('finished');
-        // Use different shades of green for finished jobs
+        // Use solid green for finished jobs
         const finishedColors = [
-          { bg: 'linear-gradient(180deg,#1d4d2a,#163a20)', border: '#2f7648' }, // Original green
-          { bg: 'linear-gradient(180deg,#1d5d2a,#164a20)', border: '#2f8648' }, // Lighter green
-          { bg: 'linear-gradient(180deg,#1d3d2a,#162a20)', border: '#2f6648' }, // Darker green
-          { bg: 'linear-gradient(180deg,#2a4d1d,#203a16)', border: '#487648' }, // Yellow-green
-          { bg: 'linear-gradient(180deg,#1d4d3a,#163a2a)', border: '#2f7658' }, // Teal-green
+          { bg: '#28a745', border: '#218838' }, // Green
+          { bg: '#28a745', border: '#218838' }, // Green
+          { bg: '#28a745', border: '#218838' }, // Green
+          { bg: '#28a745', border: '#218838' }, // Green
+          { bg: '#28a745', border: '#218838' }, // Green
         ];
         const color = finishedColors[colorIdx % finishedColors.length];
         div.style.background = color.bg;
         div.style.borderColor = color.border;
       } else if(isDepIssue) {
         div.classList.add('dep-issue');
-        // Use different shades of orange for dependency issues
+        // Use solid yellow for dependency issues
         const depIssueColors = [
-          { bg: 'linear-gradient(180deg,#4d3a1d,#3a2a16)', border: '#76624f' }, // Original orange
-          { bg: 'linear-gradient(180deg,#5d4a1d,#4a3a16)', border: '#86724f' }, // Lighter orange
-          { bg: 'linear-gradient(180deg,#3d2a1d,#2a1a16)', border: '#66524f' }, // Darker orange
-          { bg: 'linear-gradient(180deg,#4d4a1d,#3a3a16)', border: '#76724f' }, // Yellow-orange
-          { bg: 'linear-gradient(180deg,#4d2a1d,#3a1a16)', border: '#76524f' }, // Red-orange
+          { bg: '#ffc107', border: '#e0a800' }, // Yellow
+          { bg: '#ffc107', border: '#e0a800' }, // Yellow
+          { bg: '#ffc107', border: '#e0a800' }, // Yellow
+          { bg: '#ffc107', border: '#e0a800' }, // Yellow
+          { bg: '#ffc107', border: '#e0a800' }, // Yellow
         ];
         const color = depIssueColors[colorIdx % depIssueColors.length];
         div.style.background = color.bg;
         div.style.borderColor = color.border;
       } else if(isConflict) {
         div.classList.add('conflict');
-        // Use different shades of red for conflicting overlaps
+        // Use solid red for conflicts
         const conflictColors = [
-          { bg: 'linear-gradient(180deg,#4d1d1d,#3a1616)', border: '#6f3131' }, // Original red
-          { bg: 'linear-gradient(180deg,#5d1d1d,#4a1616)', border: '#7f3131' }, // Lighter red
-          { bg: 'linear-gradient(180deg,#3d1d1d,#2a1616)', border: '#5f3131' }, // Darker red
-          { bg: 'linear-gradient(180deg,#4d2d1d,#3a2216)', border: '#6f4131' }, // Red-orange
-          { bg: 'linear-gradient(180deg,#4d1d2d,#3a1622)', border: '#6f3141' }, // Red-purple
+          { bg: '#dc3545', border: '#c82333' }, // Red
+          { bg: '#dc3545', border: '#c82333' }, // Red
+          { bg: '#dc3545', border: '#c82333' }, // Red
+          { bg: '#dc3545', border: '#c82333' }, // Red
+          { bg: '#dc3545', border: '#c82333' }, // Red
         ];
         const color = conflictColors[colorIdx % conflictColors.length];
         div.style.background = color.bg;
@@ -712,7 +790,7 @@ function renderTimeline(){
       }
       
       if(jobTouchesShabbat(j)) div.classList.add('shabbat');
-      div.style.left = left+'px';
+      div.style.right = left+'px'; // RTL positioning
       div.style.width = width+'px';
       
       const depInfo = j.dependsOn ? JOBS.find(dj=>dj.id===j.dependsOn) : null;
@@ -782,7 +860,7 @@ function renderTimeline(){
         dragState.job = j;
         dragState.originalWorker = worker;
         dragState.currentWorker = worker;
-        dragState.offsetX = e.clientX - rect.left;
+        dragState.offsetX = rect.right - e.clientX; // RTL: offset from right edge
         dragState.startLeft = rect.left - gridRect.left;
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/html', div.innerHTML);
@@ -796,16 +874,16 @@ function renderTimeline(){
         dragMoved = false;
       });
       
-      // Add resize functionality
+      // Add resize functionality (RTL: right=start, left=end)
       const leftHandle = div.querySelector('.timeline-resize-left');
       const rightHandle = div.querySelector('.timeline-resize-right');
       
       if (leftHandle) {
-        leftHandle.addEventListener('mousedown', (e) => startTimelineResize(e, div, j, 'start', grid));
+        leftHandle.addEventListener('mousedown', (e) => startTimelineResize(e, div, j, 'end', grid));
       }
       
       if (rightHandle) {
-        rightHandle.addEventListener('mousedown', (e) => startTimelineResize(e, div, j, 'end', grid));
+        rightHandle.addEventListener('mousedown', (e) => startTimelineResize(e, div, j, 'start', grid));
       }
       
       grid.appendChild(div);
@@ -829,7 +907,7 @@ function renderTimeline(){
       if(!dragState.job) return;
       
       const gridRect = grid.getBoundingClientRect();
-      const dropX = e.clientX - gridRect.left - dragState.offsetX;
+      const dropX = gridRect.right - e.clientX - dragState.offsetX; // RTL: calculate from right edge
       
       // Calculate new time based on drop position
       const newStartTime = posToTime(Math.max(0, dropX));
@@ -907,11 +985,11 @@ function handleTimelineResize(e) {
   const job = JOBS.find(j => j.id === timelineResizeState.jobId);
   if (!job) return;
   
-  // Calculate pixel difference
-  const dx = e.clientX - timelineResizeState.startX;
+  // Calculate pixel difference (inverted for RTL)
+  const dx = timelineResizeState.startX - e.clientX;
   
-  // Convert pixels to minutes (88px per hour = 44px per 30min)
-  const minutesPerPixel = 60 / 88; // 88px = 1 hour
+  // Convert pixels to minutes (40px per hour)
+  const minutesPerPixel = 60 / 40; // 40px = 1 hour
   const minutesDiff = Math.round(dx * minutesPerPixel / 15) * 15; // Round to 15 minutes
   
   if (timelineResizeState.edge === 'start') {
@@ -2031,27 +2109,33 @@ function initEventListeners(){
     if(name==='team') renderTeamManagement();
   }));
 
-  // Timeline date default = today
-  const todayStr = dayjs().format('YYYY-MM-DD'); $('#tl-date').value = todayStr;
-  $('#tl-date').addEventListener('input', renderTimeline);
+  // Timeline date range default = first job date or today + 3 days
+  function getFirstJobDate() {
+    const jobsWithDates = JOBS.filter(j => j.start && dayjs(j.start).isValid());
+    if (jobsWithDates.length === 0) {
+      return dayjs().format('YYYY-MM-DD');
+    }
+    const sortedJobs = jobsWithDates.sort((a, b) => dayjs(a.start).valueOf() - dayjs(b.start).valueOf());
+    return dayjs(sortedJobs[0].start).format('YYYY-MM-DD');
+  }
   
-  // Today button
+  const defaultStartDate = getFirstJobDate();
+  const defaultEndDate = dayjs(defaultStartDate).add(3, 'days').format('YYYY-MM-DD');
+  $('#tl-start-date').value = defaultStartDate;
+  $('#tl-end-date').value = defaultEndDate;
+  
+  // Apply date range button
+  $('#btnApplyTimelineRange')?.addEventListener('click', renderTimeline);
+  
+  // Date input changes
+  $('#tl-start-date')?.addEventListener('input', renderTimeline);
+  $('#tl-end-date')?.addEventListener('input', renderTimeline);
+  
+  // Today button - set range to today + 3 days
   $('#btnToday').addEventListener('click', () => {
-    $('#tl-date').value = dayjs().format('YYYY-MM-DD');
-    renderTimeline();
-  });
-  
-  // Previous day button (left arrow)
-  $('#btnPrevDay').addEventListener('click', () => {
-    const currentDate = $('#tl-date').value || dayjs().format('YYYY-MM-DD');
-    $('#tl-date').value = dayjs(currentDate).subtract(1, 'day').format('YYYY-MM-DD');
-    renderTimeline();
-  });
-  
-  // Next day button (right arrow)
-  $('#btnNextDay').addEventListener('click', () => {
-    const currentDate = $('#tl-date').value || dayjs().format('YYYY-MM-DD');
-    $('#tl-date').value = dayjs(currentDate).add(1, 'day').format('YYYY-MM-DD');
+    const today = dayjs().format('YYYY-MM-DD');
+    $('#tl-start-date').value = today;
+    $('#tl-end-date').value = dayjs(today).add(3, 'days').format('YYYY-MM-DD');
     renderTimeline();
   });
 

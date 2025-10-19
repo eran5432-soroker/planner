@@ -145,6 +145,37 @@ function setupTimelineEventListeners() {
   });
 }
 
+// Get the earliest and latest job dates
+function getJobDateRange() {
+  const jobs = JOBS.filter(j => j.start && j.end);
+  
+  if (jobs.length === 0) {
+    return null;
+  }
+  
+  let earliest = null;
+  let latest = null;
+  
+  jobs.forEach(job => {
+    const start = dayjs(job.start);
+    const end = dayjs(job.end);
+    
+    if (start.isValid()) {
+      if (!earliest || start.isBefore(earliest)) {
+        earliest = start;
+      }
+    }
+    
+    if (end.isValid()) {
+      if (!latest || end.isAfter(latest)) {
+        latest = end;
+      }
+    }
+  });
+  
+  return { earliest, latest };
+}
+
 // Update timeline date range
 function updateTimelineDateRange() {
   const startDateInput = document.getElementById('timeline-start-date');
@@ -153,13 +184,25 @@ function updateTimelineDateRange() {
   if (startDateInput?.value) {
     timelineState.startDate = dayjs(startDateInput.value);
   } else {
-    timelineState.startDate = dayjs().startOf('day');
+    // Auto-detect date range from jobs
+    const dateRange = getJobDateRange();
+    if (dateRange && dateRange.earliest) {
+      timelineState.startDate = dateRange.earliest.startOf('day');
+    } else {
+      timelineState.startDate = dayjs().startOf('day');
+    }
   }
   
   if (endDateInput?.value) {
     timelineState.endDate = dayjs(endDateInput.value).endOf('day');
   } else {
-    timelineState.endDate = timelineState.startDate.clone().add(7, 'days');
+    // Auto-detect end date from jobs, or use 7 days after start
+    const dateRange = getJobDateRange();
+    if (dateRange && dateRange.latest) {
+      timelineState.endDate = dateRange.latest.endOf('day');
+    } else {
+      timelineState.endDate = timelineState.startDate.clone().add(7, 'days').endOf('day');
+    }
   }
   
   // Set default values if not set
@@ -208,32 +251,36 @@ function renderTimelineHeader() {
   let headerHTML = '';
   
   if (timeScale === 'hours') {
-    // Two-line header: days on top, hours below
+    // Two-line header: days on top, hours below (similar to Gantt)
     const days = [];
-    const hours = [];
+    let cumulativePosition = 0;
+    const hourWidth = TIMELINE_CONFIG.hourWidth * timelineState.zoomLevel;
     
-    let current = startDate.clone();
-    while (current.isBefore(endDate) || current.isSame(endDate, 'day')) {
+    let current = startDate.clone().startOf('day');
+    const end = endDate.clone().startOf('day');
+    
+    while (current.isSameOrBefore(end, 'day')) {
       const dayName = current.format('ddd DD/MM');
-      days.push(`<div class="timeline-day-header">${dayName}</div>`);
+      const dayWidth = 24 * hourWidth;
+      
+      // Add day header with absolute positioning
+      days.push(`<div class="timeline-day-header" style="width: ${dayWidth}px; left: ${cumulativePosition}px; position: absolute;">${dayName}</div>`);
       
       // Add hours for this day
       const dayHours = [];
       for (let h = 0; h < 24; h++) {
-        const hour = current.clone().hour(h);
-        if (hour.isAfter(endDate)) break;
-        if (hour.isBefore(startDate)) continue;
-        
-        dayHours.push(`<div class="timeline-hour-header">${h}</div>`);
+        const hourPosition = cumulativePosition + (h * hourWidth);
+        dayHours.push(`<div class="timeline-hour-header" style="width: ${hourWidth}px; left: ${hourPosition}px; position: absolute;">${h}</div>`);
       }
-      hours.push(`<div class="timeline-day-hours">${dayHours.join('')}</div>`);
+      headerHTML += dayHours.join('');
       
+      cumulativePosition += dayWidth;
       current = current.add(1, 'day');
     }
     
     headerHTML = `
-      <div class="timeline-days-row">${days.join('')}</div>
-      <div class="timeline-hours-row">${hours.join('')}</div>
+      <div class="timeline-days-row" style="position: relative; height: 30px;">${days.join('')}</div>
+      <div class="timeline-hours-row" style="position: relative; height: 30px;">${headerHTML}</div>
     `;
   } else {
     // Single line for days only
@@ -249,6 +296,11 @@ function renderTimelineHeader() {
   }
   
   header.innerHTML = headerHTML;
+  
+  // Set header width to match grid width
+  const totalWidth = getTimelineWidth();
+  header.style.width = totalWidth + 'px';
+  header.style.minWidth = totalWidth + 'px';
 }
 
 // Render timeline tasks
@@ -360,33 +412,33 @@ function calculateTaskWidth(startTime, endTime) {
 
 // Get task color based on job properties
 function getTaskColor(job) {
-  // Color based on priority
-  const priorityColors = {
-    'high': '#ff6b6b',
-    'medium': '#4ecdc4',
-    'low': '#45b7d1',
-    'urgent': '#ff9f43'
-  };
+  // Get conflicts and dependency issues (same logic as Gantt view)
+  const conflicts = recomputeConflicts();
+  const depIssues = recomputeDependencyIssues();
+  const isConflict = conflicts.has(job.id);
+  const isDepIssue = depIssues.has(job.id);
+  const isFinished = job.finished;
+  const isShabbat = jobTouchesShabbat(job);
   
-  if (job.priority && priorityColors[job.priority.toLowerCase()]) {
-    return priorityColors[job.priority.toLowerCase()];
+  // Priority colors - only show special colors for issues/status
+  if (isConflict) {
+    return '#dc3545'; // Red for conflicts
   }
   
-  // Default color based on factory
-  const factoryColors = [
-    '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57',
-    '#ff9ff3', '#54a0ff', '#5f27cd', '#00d2d3', '#ff9f43'
-  ];
-  
-  if (job.factory) {
-    const hash = job.factory.split('').reduce((a, b) => {
-      a = ((a << 5) - a) + b.charCodeAt(0);
-      return a & a;
-    }, 0);
-    return factoryColors[Math.abs(hash) % factoryColors.length];
+  if (isDepIssue) {
+    return '#ffc107'; // Yellow for dependency issues
   }
   
-  return '#95a5a6'; // Default gray
+  if (isFinished) {
+    return '#28a745'; // Green for finished tasks
+  }
+  
+  if (isShabbat) {
+    return '#ffc107'; // Yellow for Shabbat tasks
+  }
+  
+  // Default color for all normal tasks (no conflicts)
+  return '#6295e8'; // Blue for normal tasks
 }
 
 // Get timeline width
